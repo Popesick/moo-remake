@@ -1,4 +1,4 @@
-import { PARSEC_PIXELS } from "./data/logistics.js";
+import { PARSEC_PIXELS, DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 
 function nextFleetId(galaxy) {
   galaxy.nextFleetId = (galaxy.nextFleetId ?? 1) + 1;
@@ -29,7 +29,21 @@ function fleetShipCount(fleet) {
   return fleet.stacks.reduce((sum, s) => sum + s.count, 0);
 }
 
-export function sendFleet(galaxy, fleetId, destinationSystemId, travelSpeedParsec) {
+// Treibstoffreichweite (ROADMAP v0.10): ein Ziel ist erreichbar, wenn es
+// innerhalb von empire.travelRangeParsec um irgendeine eigene Kolonie liegt
+// (Kreisradius-Union, siehe js/data/logistics.js). Reisen zwischen zwei
+// eigenen Systemen ist davon unabhängig immer uneingeschränkt möglich.
+export function isSystemInRange(galaxy, empire, targetSystem) {
+  if (!empire) return true;
+  const destOwnedByEmpire = targetSystem.planets.some((p) => p.colonizedBy === empire.id);
+  if (destOwnedByEmpire) return true;
+  const ownedSystems = galaxy.systems.filter((s) => s.planets.some((p) => p.colonizedBy === empire.id));
+  if (ownedSystems.length === 0) return true;
+  const range = empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC;
+  return ownedSystems.some((s) => Math.hypot(s.x - targetSystem.x, s.y - targetSystem.y) / PARSEC_PIXELS <= range);
+}
+
+export function sendFleet(galaxy, fleetId, destinationSystemId) {
   const fleet = galaxy.fleets.find((f) => f.id === fleetId);
   if (!fleet) return { ok: false, reason: "Flotte nicht gefunden." };
   if (fleet.destinationSystemId) return { ok: false, reason: "Flotte bereits unterwegs." };
@@ -38,8 +52,14 @@ export function sendFleet(galaxy, fleetId, destinationSystemId, travelSpeedParse
   if (!origin || !destination) return { ok: false, reason: "System nicht gefunden." };
   if (origin.id === destination.id) return { ok: false, reason: "Flotte befindet sich bereits dort." };
 
+  const empire = galaxy.empires.find((e) => e.id === fleet.ownerEmpireId);
+  if (!isSystemInRange(galaxy, empire, destination)) {
+    const range = empire?.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC;
+    return { ok: false, reason: `Ziel außerhalb der Treibstoffreichweite (${range} Parsec ab eigenen Kolonien).` };
+  }
+
   const distance = Math.hypot(destination.x - origin.x, destination.y - origin.y);
-  const speed = Math.max(1, travelSpeedParsec) * PARSEC_PIXELS;
+  const speed = Math.max(1, empire?.travelSpeedParsec ?? DEFAULT_TRAVEL_SPEED) * PARSEC_PIXELS;
   fleet.destinationSystemId = destinationSystemId;
   fleet.originSystemId = fleet.systemId;
   fleet.travelRemaining = distance;

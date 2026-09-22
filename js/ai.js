@@ -121,7 +121,7 @@ function attemptAggression(galaxy, empire) {
 
   const targetHome = galaxy.systems.find((s) => s.homeworldEmpireId === atWarWith[0].id);
   if (!targetHome) return;
-  sendFleet(galaxy, strongFleet.id, targetHome.id, empire.travelSpeedParsec);
+  sendFleet(galaxy, strongFleet.id, targetHome.id);
 }
 
 // Invadiert automatisch jeden Planeten eines Kriegsgegners, an dessen

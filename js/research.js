@@ -167,6 +167,9 @@ export function applyTechEffect(empire, tech) {
     case "travelSpeed":
       empire.travelSpeedParsec = Math.max(empire.travelSpeedParsec ?? 1, effect.value);
       break;
+    case "travelRange":
+      empire.travelRangeParsec = Math.max(empire.travelRangeParsec ?? 0, effect.value);
+      break;
     case "attackBonus":
       empire.attackBonus = Math.max(empire.attackBonus ?? 0, effect.value);
       break;

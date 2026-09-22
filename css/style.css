@@ -170,6 +170,12 @@ button:hover {
 
 #galaxy-canvas {
   flex: 1;
+  /* Canvas ist ein "replaced element": ohne min-width:0 nutzt Flexbox seine
+     Breiten-ATTRIBUT-Größe (hier clientWidth*devicePixelRatio aus
+     js/render.js) als Mindestbreite und drückt bei devicePixelRatio > 1 die
+     Seitenleiste aus dem sichtbaren Bereich – reproduzierbar beim Zoomen,
+     da jeder Render-Aufruf erneut den (zu großen) Attributwert setzt. */
+  min-width: 0;
   display: block;
   cursor: grab;
 }

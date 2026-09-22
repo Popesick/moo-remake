@@ -10,8 +10,10 @@ import { costForTech, getCandidateTechs } from "./research.js";
 import { getResearchCostFactor } from "./data/raceResearch.js";
 import { isAtWar, getTradeAgreement, computeTradeBonusBC } from "./diplomacy.js";
 import { maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
+import { isSystemInRange } from "./fleets.js";
 import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import { COUNCIL_MAJORITY_RATIO } from "./data/diplomacyOptions.js";
+import { DEFAULT_TRAVEL_RANGE_PARSEC, UNLIMITED_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -235,7 +237,7 @@ function buildEnemyPlanetCard(system, planet, empire, playerEmpire, galaxy, call
   return li;
 }
 
-function buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks) {
+function buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callbacks) {
   const env = getEnvironment(planet.environment);
   const size = getPlanetSize(planet.size);
   const richness = getRichness(planet.richness);
@@ -266,7 +268,9 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks) {
   note.textContent = env.note;
   li.appendChild(note);
 
-  if (isColonizable(planet, playerEmpire)) {
+  const inRange = isSystemInRange(galaxy, playerEmpire, system);
+
+  if (isColonizable(planet, playerEmpire) && inRange) {
     const btn = document.createElement("button");
     btn.className = "btn-colonize";
     btn.textContent = `Kolonisieren (${playerEmpire.colonyShips} Kolonieschiff${playerEmpire.colonyShips === 1 ? "" : "e"} verfügbar)`;
@@ -276,9 +280,13 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks) {
   } else {
     const hint = document.createElement("div");
     hint.className = "colonize-hint";
-    hint.textContent = env.techReq > 0
-      ? `Erfordert eine Planetologie-Technologie auf Stufe ${env.techReq} (siehe Forschungsdialog).`
-      : "Noch nicht kolonisierbar.";
+    if (!inRange) {
+      hint.textContent = `Außerhalb der Treibstoffreichweite (${playerEmpire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC} Parsec ab eigenen Kolonien) – weitere Fuel-Cell-Forschung nötig.`;
+    } else {
+      hint.textContent = env.techReq > 0
+        ? `Erfordert eine Planetologie-Technologie auf Stufe ${env.techReq} (siehe Forschungsdialog).`
+        : "Noch nicht kolonisierbar.";
+    }
     li.appendChild(hint);
   }
 
@@ -322,7 +330,7 @@ export function renderSystemPanel(system, galaxy, callbacks) {
         list.appendChild(buildEnemyPlanetCard(system, planet, empire, playerEmpire, galaxy, callbacks));
       }
     } else {
-      list.appendChild(buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks));
+      list.appendChild(buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callbacks));
     }
   }
 
@@ -418,7 +426,9 @@ export function updateTopbarInfo(galaxy) {
   if (player) {
     const race = getRace(player.raceId);
     const techLevelSum = DISCIPLINES.reduce((s, d) => s + (player.research?.techLevel[d.id] ?? 0), 0);
-    statsEl.textContent = `${race?.name ?? "Spieler"} · Kolonieschiffe: ${player.colonyShips} · Forschung: ${fmt(player.lastResearchIncome ?? 0, 1)} RP/Runde · Techstufen gesamt: ${techLevelSum}`;
+    const range = player.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC;
+    const rangeText = range >= UNLIMITED_TRAVEL_RANGE_PARSEC ? "unbegrenzt" : `${range} Parsec`;
+    statsEl.textContent = `${race?.name ?? "Spieler"} · Kolonieschiffe: ${player.colonyShips} · Forschung: ${fmt(player.lastResearchIncome ?? 0, 1)} RP/Runde · Techstufen gesamt: ${techLevelSum} · Flottenreichweite: ${rangeText}`;
   } else {
     statsEl.textContent = "";
   }

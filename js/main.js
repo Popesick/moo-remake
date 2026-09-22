@@ -1,11 +1,12 @@
 import { generateGalaxy, findSystem } from "./galaxyGen.js";
 import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
-import { render, pickSystemAt, fitGalaxyToView } from "./render.js";
+import { render, pickSystemAt, fitGalaxyToView, centerCameraOnPoint } from "./render.js";
 import { simulateTurn, colonizePlanet, computePlanetProduction } from "./economy.js";
 import { normalizeSliders } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
 import { sendFleet, splitStack } from "./fleets.js";
+import { DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import {
   getRelation,
   setRelationStatus,
@@ -95,7 +96,8 @@ const panelCallbacks = {
   },
   onArmFleetMove(fleetId) {
     gameState.pendingFleetMove = fleetId;
-    flashTopbar("Zielsystem auf der Karte anklicken …");
+    flashTopbar("Zielsystem auf der Karte anklicken … (Treibstoffreichweite als Kreis markiert)");
+    requestRender();
   },
   onInvade(systemId, planetId, troopsRequested) {
     const galaxy = gameState.galaxy;
@@ -151,7 +153,10 @@ const panelCallbacks = {
 };
 
 function requestRender() {
-  render(canvas, gameState.galaxy, gameState.camera, gameState.selectedSystemId);
+  const rangeOverlay = gameState.pendingFleetMove
+    ? { empireId: getPlayerEmpire()?.id, rangeParsec: getPlayerEmpire()?.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC }
+    : null;
+  render(canvas, gameState.galaxy, gameState.camera, gameState.selectedSystemId, rangeOverlay);
 }
 
 function refreshSidePanel() {
@@ -163,6 +168,22 @@ function selectSystem(system) {
   gameState.selectedSystemId = system ? system.id : null;
   refreshSidePanel();
   requestRender();
+}
+
+// Springt zum Heimatsystem des Spielers: zentriert die Kamera darauf und
+// wählt es zugleich in der Seitenleiste aus (behebt "Heimatsystem nicht
+// auffindbar" nach dem Verschieben/Zoomen der Karte).
+function goToHomeSystem() {
+  if (!gameState.galaxy) return;
+  const player = getPlayerEmpire();
+  const homeSystem = gameState.galaxy.systems.find((s) => s.homeworldEmpireId === player.id);
+  if (!homeSystem) {
+    flashTopbar("Heimatsystem nicht gefunden.");
+    return;
+  }
+  gameState.camera.zoom = Math.max(gameState.camera.zoom, 0.9);
+  centerCameraOnPoint(canvas, gameState.camera, homeSystem.x, homeSystem.y);
+  selectSystem(homeSystem);
 }
 
 function startNewGalaxy({ sizeId, empireCount, difficultyId, seed }) {
@@ -396,12 +417,12 @@ function setupCanvasInteractions() {
     if (gameState.pendingFleetMove) {
       const fleetId = gameState.pendingFleetMove;
       gameState.pendingFleetMove = null;
+      requestRender(); // Reichweiten-Overlay ausblenden, unabhängig vom Ausgang
       if (!system) {
         flashTopbar("Kein Zielsystem ausgewählt.");
         return;
       }
-      const player = getPlayerEmpire();
-      const result = sendFleet(gameState.galaxy, fleetId, system.id, player.travelSpeedParsec);
+      const result = sendFleet(gameState.galaxy, fleetId, system.id);
       if (!result.ok) {
         flashTopbar(result.reason);
       } else {
@@ -472,6 +493,8 @@ function setupDialogAndButtons() {
     openDiplomacyDialog();
   });
   document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacyDialog);
+
+  document.getElementById("btn-home").addEventListener("click", goToHomeSystem);
 
   document.getElementById("gameend-close").addEventListener("click", closeGameEndDialog);
 

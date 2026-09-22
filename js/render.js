@@ -1,4 +1,5 @@
 import { getStarType } from "./data/starTypes.js";
+import { PARSEC_PIXELS } from "./data/logistics.js";
 
 const STAR_RADIUS_BASE = 6;
 const SELECT_RING_COLOR = "#5b9dff";
@@ -39,7 +40,40 @@ export function screenToWorld(camera, x, y) {
   };
 }
 
-export function render(canvas, galaxy, camera, selectedSystemId) {
+// Zentriert die Kamera (mutiert camera.x/y, Zoom bleibt unverändert) auf
+// einen Weltkoordinaten-Punkt, z.B. für den "Heimatsystem"-Button.
+export function centerCameraOnPoint(canvas, camera, worldX, worldY) {
+  const w = canvas.clientWidth || window.innerWidth || 800;
+  const h = canvas.clientHeight || window.innerHeight || 600;
+  camera.x = worldX - w / 2 / camera.zoom;
+  camera.y = worldY - h / 2 / camera.zoom;
+}
+
+// Zeichnet die Treibstoffreichweite (ROADMAP v0.10) als transluzente Kreise
+// um alle Kolonien des angegebenen Imperiums – aktiv während der
+// Zielwahl für eine Flottenbewegung (gameState.pendingFleetMove), damit
+// sofort sichtbar ist, welche Systeme ohne weitere Forschung erreichbar sind.
+function renderRangeOverlay(ctx, camera, galaxy, empireId, rangeParsec) {
+  const ownedSystems = galaxy.systems.filter((s) => s.planets.some((p) => p.colonizedBy === empireId));
+  if (ownedSystems.length === 0) return;
+  const radiusPixels = rangeParsec * PARSEC_PIXELS * camera.zoom;
+  ctx.save();
+  ctx.fillStyle = "rgba(91, 157, 255, 0.06)";
+  ctx.strokeStyle = "rgba(91, 157, 255, 0.4)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  for (const system of ownedSystems) {
+    const p = worldToScreen(camera, system.x, system.y);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radiusPixels, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+export function render(canvas, galaxy, camera, selectedSystemId, rangeOverlay) {
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
@@ -68,6 +102,10 @@ export function render(canvas, galaxy, camera, selectedSystemId) {
     ctx.fill();
   }
   ctx.restore();
+
+  if (rangeOverlay) {
+    renderRangeOverlay(ctx, camera, galaxy, rangeOverlay.empireId, rangeOverlay.rangeParsec);
+  }
 
   // Sternensysteme
   for (const system of galaxy.systems) {

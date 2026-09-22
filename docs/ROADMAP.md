@@ -126,6 +126,32 @@ spielbar von der Kolonisierung bis zum Sieg.
   Krieg/Frieden/Handel hinaus; KI-Ratsstimmen berücksichtigen nur den
   binären Kriegsstatus, keine feinere Beziehungsskala.
 
+- **v0.9.1 – UI-Fixes & Flottenreichweite**
+  Zwei gemeldete UI-Bugs behoben: Die Seitenleiste wurde bei
+  `devicePixelRatio > 1` (z.B. Retina-Displays) beim Rendern der Karte aus
+  dem sichtbaren Bereich gedrängt, da der Canvas als Flex-Kind ohne
+  `min-width: 0` seine (durch `canvas.width = clientWidth * devicePixelRatio`
+  gesetzte) Attribut-Breite als Flexbox-Mindestbreite nutzte – behoben durch
+  `min-width: 0` in `css/style.css`. Außerdem gab es keine Möglichkeit, zum
+  eigenen Heimatsystem zurückzuspringen, nachdem man die Karte verschoben
+  hat – neuer Topbar-Button "Heimatsystem" zentriert die Kamera darauf und
+  wählt es in der Seitenleiste aus.
+
+  Zusätzlich: Flottenreichweite (Fuel-Cell-Mechanik aus MoO2, auf Wunsch
+  für dieses Remake übernommen). Jedes Ziel außerhalb eines Kreisradius um
+  die eigenen Kolonien ist ohne ausreichende Treibstoffzellen-Forschung
+  (Propulsion-Techs, bereits seit v0.3 im Baum vorbereitet) nicht
+  erreichbar – weder für Kampfflotten noch für Kolonieschiffe. Reisen
+  zwischen zwei eigenen Systemen bleibt davon unabhängig immer uneingeschränkt
+  möglich. Während der Zielwahl einer Flottenbewegung zeigt die Karte die
+  aktuelle Reichweite als transluzenten Kreis um jede eigene Kolonie.
+  *Vereinfacht:* kein diskreter Sternenstraßen-Graph, sondern ein reiner
+  Radius-Check (wie im Original); die MoO2-Parsec-Werte (4-10) wurden
+  gegenüber der Vorlage hochskaliert (Basis 8, bis 36 vor der finalen
+  unbegrenzten Reichweite durch Thorium Cells), da sie empirisch zur
+  tatsächlichen Systemdichte dieses Remakes passen müssen, statt Spieler an
+  ihrem Heimatsystem festzunageln.
+
 ## Weitere Post-Prototyp-Releases
 
 - v0.10 Orion-System & Guardian, Miniaturisierungs-Inhalte, galaktische Zufallsereignisse

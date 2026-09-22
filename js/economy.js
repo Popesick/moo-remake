@@ -4,9 +4,9 @@ import { getPlanetSize } from "./data/planetSizes.js";
 import { getDifficulty } from "./data/difficulty.js";
 import { initEmpireResearch, processResearchTurn, applyTechEffect } from "./research.js";
 import { computeDesignStats } from "./shipDesign.js";
-import { addShipsToSystem, advanceFleets } from "./fleets.js";
+import { addShipsToSystem, advanceFleets, isSystemInRange } from "./fleets.js";
 import { resolveSystemCombat } from "./combat.js";
-import { DEFAULT_TRAVEL_SPEED } from "./data/logistics.js";
+import { DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import { getRaceTraits } from "./data/raceTraits.js";
 import { runAiTurn } from "./ai.js";
 import { isAtWar, tickTradeAgreements } from "./diplomacy.js";
@@ -63,6 +63,7 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     researchCostFactor: difficulty.researchCostFactor,
     lastResearchIncome: 0,
     travelSpeedParsec: DEFAULT_TRAVEL_SPEED,
+    travelRangeParsec: DEFAULT_TRAVEL_RANGE_PARSEC,
     shipDesigns: [],
     attackBonus: traits.attackBonus ?? 0,
     ecmDefense: 0,
@@ -308,6 +309,12 @@ export function colonizePlanet(galaxy, systemId, planetId, empireId) {
   if (!planet) return { ok: false, reason: "Planet nicht gefunden." };
   if (!isColonizable(planet, empire)) {
     return { ok: false, reason: "Planet ist mit aktueller Technologie nicht kolonisierbar." };
+  }
+  // Kolonieschiffe unterliegen derselben Treibstoffreichweite wie
+  // Kampfflotten (ROADMAP v0.10), siehe js/fleets.js isSystemInRange.
+  if (!isSystemInRange(galaxy, empire, system)) {
+    const range = empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC;
+    return { ok: false, reason: `Ziel außerhalb der Treibstoffreichweite (${range} Parsec ab eigenen Kolonien).` };
   }
 
   empire.colonyShips -= 1;
