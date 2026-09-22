@@ -99,9 +99,35 @@ spielbar von der Kolonisierung bis zum Sieg.
   gewählt, KI verzichtet auf Framing, Spionage-Budget wirkt nur auf den
   SP-Vorrat und nicht zusätzlich auf die reguläre Wirtschaftsproduktion.
 
+- **v0.9 – Galaktischer Rat, Handelsabkommen & Diplomatie-Sieg**
+  Handelsabkommen: der Spieler kann jedem befriedeten Imperium ein Abkommen
+  vorschlagen, das die KI abhängig von Persönlichkeit und Ziel (xenophobe
+  Imperien lehnen grundsätzlich ab, vertragstreue/diplomatische eher an)
+  annimmt oder ablehnt. Aktive Abkommen laufen zunächst mehrere Runden mit
+  leichtem Verlust an und reifen danach linear zu einem dauerhaften
+  BC-Bonus für beide Partner heran (Obergrenze 40 BC/Runde), der anteilig
+  in Forschung, Verteidigung und Kolonieschiff-Fortschritt einfließt.
+  Kriegserklärung beendet ein bestehendes Abkommen automatisch.
+  Galaktischer Rat: sobald 2/3 aller Planeten der Galaxie kolonisiert sind,
+  tritt der Rat fortan in festen Intervallen zusammen. Die beiden Imperien
+  mit der höchsten Gesamtbevölkerung werden Kandidaten; alle übrigen
+  Imperien stimmen bevölkerungsgewichtet ab (KI-Stimmen richten sich nach
+  Kriegs-/Friedensstatus zu den Kandidaten, sonst zufällig). Erreicht ein
+  Kandidat 2/3 der Stimmen, gewinnt er die Partie durch diplomatische
+  Vereinigung. Ist der Spieler nicht selbst Kandidat, muss er in einem
+  eigenen Dialog für einen der beiden stimmen: lehnt er die Wahl eines
+  KI-Kandidaten ab, der trotzdem die Mehrheit erreicht, erklären ihm
+  stattdessen alle übrigen Imperien simultan den Krieg ("Final War",
+  Soft-Enrage-Timer fürs Endgame) statt eines sofortigen Spielendes.
+  *Vereinfacht:* Rat-Intervall in Spielrunden (10) statt 25 Jahren, da die
+  Partie auf 150 Runden begrenzt ist; KI schlägt dem Spieler selbst keine
+  Handelsabkommen vor (nur der Spieler kann initiieren); AI-AI-Handelsabkommen
+  entstehen nicht automatisch; kein Bündnis-/Nichtangriffspakt-System über
+  Krieg/Frieden/Handel hinaus; KI-Ratsstimmen berücksichtigen nur den
+  binären Kriegsstatus, keine feinere Beziehungsskala.
+
 ## Weitere Post-Prototyp-Releases
 
-- v0.9 Galaktischer Rat, Handelsabkommen/Verträge & Diplomatie-Sieg
 - v0.10 Orion-System & Guardian, Miniaturisierungs-Inhalte, galaktische Zufallsereignisse
 - v0.11 Highscore/Hall-of-Fame-Formel (inkl. Guardian-/Kill-Boni)
 - Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign

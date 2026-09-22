@@ -15,6 +15,22 @@ const WAR_CHECK_SCALE = 0.04; // dämpft warBias auf eine plausible Pro-Runde-Wa
 const ERRATIC_WAR_CHANCE = 0.03;
 const ESPIONAGE_ATTEMPT_CHANCE = 0.15; // Chance pro Runde, sofern genug SP vorhanden sind
 
+// Entscheidet, ob eine KI ein vom Spieler vorgeschlagenes Handelsabkommen
+// annimmt (ROADMAP v0.9). Xenophobe Imperien lehnen grundsätzlich ab;
+// vertragstreue/diplomatische Persönlichkeiten sind zugänglicher, hohe
+// Kriegsneigung senkt die Chance. *Vereinfacht:* KI schlägt dem Spieler
+// selbst keine Handelsabkommen vor, nur der Spieler kann sie initiieren.
+export function aiAcceptsTradeOffer(empire) {
+  const personality = getPersonality(empire.personalityId);
+  if (personality.treatyAverse) return false;
+  let chance = 0.5;
+  if (personality.keepsTreaties) chance += 0.3;
+  if (empire.objectiveId === "diplomat") chance += 0.2;
+  chance -= personality.warBias * 0.3;
+  chance = Math.min(0.95, Math.max(0.05, chance));
+  return Math.random() < chance;
+}
+
 export function assignAiBehavior(rng, empire) {
   empire.personalityId = PERSONALITIES[Math.floor(rng() * PERSONALITIES.length)].id;
   empire.objectiveId = OBJECTIVES[Math.floor(rng() * OBJECTIVES.length)].id;

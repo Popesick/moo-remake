@@ -8,9 +8,10 @@ import { DISCIPLINES } from "./data/disciplines.js";
 import { getTech } from "./data/techTree.js";
 import { costForTech, getCandidateTechs } from "./research.js";
 import { getResearchCostFactor } from "./data/raceResearch.js";
-import { isAtWar } from "./diplomacy.js";
+import { isAtWar, getTradeAgreement, computeTradeBonusBC } from "./diplomacy.js";
 import { maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
 import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
+import { COUNCIL_MAJORITY_RATIO } from "./data/diplomacyOptions.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -628,6 +629,29 @@ export function renderDiplomacyDialog(galaxy, callbacks) {
     }
     row.appendChild(warBtn);
 
+    if (relation.status !== "war") {
+      const agreement = getTradeAgreement(galaxy, player.id, empire.id);
+      const tradeRow = document.createElement("div");
+      tradeRow.className = "fleet-actions";
+      if (agreement) {
+        const bonus = computeTradeBonusBC(agreement);
+        const status = document.createElement("span");
+        status.className = "colonize-hint";
+        status.textContent = `Handelsabkommen aktiv seit ${agreement.turnsActive} Runde(n) · Ertrag: ${fmt(bonus, 1)} BC/Runde`;
+        tradeRow.appendChild(status);
+        const cancelBtn = document.createElement("button");
+        cancelBtn.textContent = "Handelsabkommen kündigen";
+        cancelBtn.addEventListener("click", () => callbacks.onCancelTrade(empire.id));
+        tradeRow.appendChild(cancelBtn);
+      } else {
+        const proposeBtn = document.createElement("button");
+        proposeBtn.textContent = "Handelsabkommen vorschlagen";
+        proposeBtn.addEventListener("click", () => callbacks.onProposeTrade(empire.id));
+        tradeRow.appendChild(proposeBtn);
+      }
+      row.appendChild(tradeRow);
+    }
+
     const frameLabel = document.createElement("label");
     frameLabel.className = "colonize-hint";
     const frameCheckbox = document.createElement("input");
@@ -668,6 +692,8 @@ export function renderGameEnd(gameEnd, galaxy) {
   const winnerRace = getRace(winner?.raceId);
   const reasonText = gameEnd.reason === "elimination"
     ? "Sieg durch Elimination aller Rivalen"
+    : gameEnd.reason === "diplomatic"
+    ? `Diplomatischer Sieg im Galaktischen Rat für ${winnerRace?.name ?? winner?.name ?? "?"}`
     : `Rundenlimit erreicht (Runde ${galaxy.turn - 1})`;
   title.textContent = `Spielende – ${reasonText}`;
 
@@ -687,4 +713,60 @@ export function openGameEndDialog() {
 
 export function closeGameEndDialog() {
   document.getElementById("gameend-dialog").hidden = true;
+}
+
+// Zeigt eine fällige Ratssitzung: die beiden Kandidaten mit ihrer
+// Gesamtbevölkerung und den bereits ausgezählten KI-Stimmen. Ist der Spieler
+// selbst Kandidat, gibt es nichts zu wählen (nur "Fortsetzen"); sonst muss er
+// sich für einen der beiden entscheiden – votiert er gegen einen KI-Kandidaten,
+// der die Mehrheit erreicht, folgt der "Final War" (siehe js/council.js).
+export function renderCouncilDialog(galaxy, voteResult, callbacks) {
+  const body = document.getElementById("council-body");
+  const actions = document.getElementById("council-actions");
+  body.innerHTML = "";
+  actions.innerHTML = "";
+
+  const { candidates, tally, totalPopulation, playerIsCandidate } = voteResult;
+  const required = totalPopulation * COUNCIL_MAJORITY_RATIO;
+
+  const intro = document.createElement("p");
+  intro.className = "dialog-hint";
+  intro.textContent = playerIsCandidate
+    ? "Du bist selbst Kandidat des Galaktischen Rats. Die übrigen Imperien haben bereits abgestimmt."
+    : "Der Galaktische Rat tritt zusammen. Stimme für einen der beiden Kandidaten – lehnst du die Wahl eines Konkurrenten ab, der die Mehrheit erreicht, erklären dir alle übrigen Imperien den Krieg.";
+  body.appendChild(intro);
+
+  for (const candidate of candidates) {
+    const race = getRace(candidate.raceId);
+    const votes = tally[candidate.id] ?? 0;
+    const pct = totalPopulation > 0 ? Math.round((votes / totalPopulation) * 100) : 0;
+    const row = document.createElement("div");
+    row.className = "design-row";
+    row.innerHTML = `<div class="design-row-head"><strong>${race?.name ?? candidate.name}${candidate.isPlayer ? " (Du)" : ""}</strong><span>${votes.toFixed(0)} / ${totalPopulation.toFixed(0)} Mio. Stimmen (${pct}%, benötigt ${Math.round((required / totalPopulation) * 100) || 67}%)</span></div>`;
+    body.appendChild(row);
+  }
+
+  if (playerIsCandidate) {
+    const continueBtn = document.createElement("button");
+    continueBtn.textContent = "Fortsetzen";
+    continueBtn.addEventListener("click", () => callbacks.onVote(null));
+    actions.appendChild(continueBtn);
+    return;
+  }
+
+  for (const candidate of candidates) {
+    const race = getRace(candidate.raceId);
+    const btn = document.createElement("button");
+    btn.textContent = `Für ${race?.name ?? candidate.name} stimmen`;
+    btn.addEventListener("click", () => callbacks.onVote(candidate.id));
+    actions.appendChild(btn);
+  }
+}
+
+export function openCouncilDialog() {
+  document.getElementById("council-dialog").hidden = false;
+}
+
+export function closeCouncilDialog() {
+  document.getElementById("council-dialog").hidden = true;
 }

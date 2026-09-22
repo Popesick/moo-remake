@@ -9,7 +9,8 @@ import { resolveSystemCombat } from "./combat.js";
 import { DEFAULT_TRAVEL_SPEED } from "./data/logistics.js";
 import { getRaceTraits } from "./data/raceTraits.js";
 import { runAiTurn } from "./ai.js";
-import { isAtWar } from "./diplomacy.js";
+import { isAtWar, tickTradeAgreements } from "./diplomacy.js";
+import { checkCouncilActivation, checkCouncilVoteDue } from "./council.js";
 import { checkGameEnd } from "./victory.js";
 import { ESPIONAGE_GENERATION_RATE, DEFAULT_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import {
@@ -192,6 +193,21 @@ export function simulateTurn(galaxy) {
     }
   }
 
+  // Handelsabkommen zählen eine Runde weiter und speisen ihren aktuellen
+  // BC-Ertrag (ggf. negativ während der Anlaufphase) anteilig in Forschung,
+  // Verteidigung und Kolonieschiff-Fortschritt beider Vertragspartner ein
+  // (siehe js/diplomacy.js, ROADMAP v0.9).
+  for (const { empireIdA, empireIdB, bonusBC } of tickTradeAgreements(galaxy)) {
+    for (const empireId of [empireIdA, empireIdB]) {
+      const delta = empireDeltas.get(empireId);
+      if (!delta) continue;
+      delta.techBC += bonusBC * 0.4;
+      delta.defBC += bonusBC * 0.3;
+      delta.shipBC += bonusBC * 0.3;
+      delta.totalBC += bonusBC;
+    }
+  }
+
   const turn = galaxy.turn ?? 1;
   const breakthroughsByEmpire = new Map();
 
@@ -219,7 +235,18 @@ export function simulateTurn(galaxy) {
 
   galaxy.turn = turn + 1;
   const gameEnd = checkGameEnd(galaxy);
-  return { breakthroughsByEmpire, arrivals, battleReports, gameEnd };
+
+  // Galaktischer Rat (ROADMAP v0.9): nur prüfen, wenn die Partie nicht
+  // bereits regulär endet. Eine fällige Sitzung erfordert eine echte
+  // Spielerentscheidung (js/main.js) und wird daher hier nur gemeldet, nicht
+  // automatisch aufgelöst.
+  let councilVote = null;
+  if (!gameEnd) {
+    checkCouncilActivation(galaxy);
+    councilVote = checkCouncilVoteDue(galaxy);
+  }
+
+  return { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote };
 }
 
 // Löst an jedem System, an dem stationäre Flotten mehrerer Imperien

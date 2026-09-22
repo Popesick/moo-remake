@@ -6,10 +6,19 @@ import { normalizeSliders } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
 import { sendFleet, splitStack } from "./fleets.js";
-import { getRelation, setRelationStatus, isAtWar } from "./diplomacy.js";
+import {
+  getRelation,
+  setRelationStatus,
+  isAtWar,
+  proposeTradeAgreement,
+  cancelTradeAgreement,
+} from "./diplomacy.js";
 import { resolveInvasion, applyInvasionResult, applyBioAttack, maxInvasionTroops } from "./invasion.js";
 import { attemptSpyAction } from "./espionage.js";
 import { getPersonality } from "./data/aiPersonality.js";
+import { aiAcceptsTradeOffer } from "./ai.js";
+import { resolveCouncilVote } from "./council.js";
+import { computeScore } from "./victory.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
@@ -28,6 +37,9 @@ import {
   renderGameEnd,
   openGameEndDialog,
   closeGameEndDialog,
+  renderCouncilDialog,
+  openCouncilDialog,
+  closeCouncilDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -241,24 +253,27 @@ const diplomacyCallbacks = {
     saveGame();
     flashTopbar(result.log[result.log.length - 1]);
   },
+  onProposeTrade(otherEmpireId) {
+    const player = getPlayerEmpire();
+    const other = getEmpire(otherEmpireId);
+    if (aiAcceptsTradeOffer(other)) {
+      proposeTradeAgreement(gameState.galaxy, player.id, otherEmpireId);
+      flashTopbar(`${other.name} nimmt das Handelsabkommen an.`);
+    } else {
+      flashTopbar(`${other.name} lehnt das Handelsabkommen ab.`);
+    }
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    saveGame();
+  },
+  onCancelTrade(otherEmpireId) {
+    const player = getPlayerEmpire();
+    cancelTradeAgreement(gameState.galaxy, player.id, otherEmpireId);
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    saveGame();
+  },
 };
 
-function endTurn() {
-  if (!gameState.galaxy) return;
-  const { breakthroughsByEmpire, arrivals, battleReports, gameEnd } = simulateTurn(gameState.galaxy);
-  updateTopbarInfo(gameState.galaxy);
-  refreshSidePanel();
-  requestRender();
-  saveGame();
-
-  const playerEmpire = getPlayerEmpire();
-
-  if (gameEnd) {
-    renderGameEnd(gameEnd, gameState.galaxy);
-    openGameEndDialog();
-    return;
-  }
-
+function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals) {
   const playerBattles = battleReports.filter((r) => r.empireIds.includes(playerEmpire.id));
   if (playerBattles.length > 0) {
     renderBattleReports(playerBattles, gameState.galaxy);
@@ -276,6 +291,69 @@ function endTurn() {
     const system = findSystem(gameState.galaxy, playerArrivals[0].systemId);
     flashTopbar(`Flotte in ${system?.name ?? "einem System"} angekommen.`);
   }
+}
+
+let pendingCouncilVote = null;
+
+// Löst eine vom Spieler beantwortete Ratssitzung auf (siehe js/council.js)
+// und führt danach den regulären Rundenabschluss (Kampfberichte,
+// Durchbrüche, Ankünfte) für dieselbe Runde fort.
+const councilCallbacks = {
+  onVote(candidateEmpireIdOrNull) {
+    const pending = pendingCouncilVote;
+    pendingCouncilVote = null;
+    closeCouncilDialog();
+    if (!pending) return;
+
+    const result = resolveCouncilVote(gameState.galaxy, pending.vote, candidateEmpireIdOrNull);
+    saveGame();
+    const playerEmpire = getPlayerEmpire();
+
+    if (result.outcome === "playerVictory" || result.outcome === "aiVictory") {
+      const scores = gameState.galaxy.empires.map((e) => ({ empireId: e.id, score: computeScore(gameState.galaxy, e) }));
+      gameState.galaxy.gameEndAnnounced = true;
+      renderGameEnd({ reason: "diplomatic", winnerEmpireId: result.winner.id, scores }, gameState.galaxy);
+      openGameEndDialog();
+      return;
+    }
+
+    if (result.outcome === "finalWar") {
+      updateTopbarInfo(gameState.galaxy);
+      refreshSidePanel();
+      requestRender();
+      flashTopbar(`Galaktischer Rat: Wahl von ${result.winner.name} abgelehnt – alle Imperien erklären dir den Krieg!`);
+    } else if (result.outcome === "none") {
+      flashTopbar("Galaktischer Rat: keine Mehrheit erreicht.");
+    }
+
+    finishTurnDisplay(playerEmpire, pending.battleReports, pending.breakthroughsByEmpire, pending.arrivals);
+  },
+};
+
+function endTurn() {
+  if (!gameState.galaxy) return;
+  const { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote } = simulateTurn(gameState.galaxy);
+  updateTopbarInfo(gameState.galaxy);
+  refreshSidePanel();
+  requestRender();
+  saveGame();
+
+  const playerEmpire = getPlayerEmpire();
+
+  if (gameEnd) {
+    renderGameEnd(gameEnd, gameState.galaxy);
+    openGameEndDialog();
+    return;
+  }
+
+  if (councilVote) {
+    pendingCouncilVote = { vote: councilVote, battleReports, breakthroughsByEmpire, arrivals };
+    renderCouncilDialog(gameState.galaxy, councilVote, councilCallbacks);
+    openCouncilDialog();
+    return;
+  }
+
+  finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals);
 }
 
 function setupCanvasInteractions() {
