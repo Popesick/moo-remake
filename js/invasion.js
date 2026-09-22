@@ -82,6 +82,13 @@ export function resolveInvasion(attackerEmpire, defenderEmpire, planet, troopsSe
 
 export function applyInvasionResult(galaxy, attackerEmpireId, planet, result) {
   if (result.attackerWon) {
+    const defenderEmpireId = planet.colonizedBy;
+    // Kill-Zuordnung für den Highscore (ROADMAP v0.11), siehe js/economy.js
+    // resolveAllCombats und js/victory.js checkGameEnd/computeScore.
+    if (defenderEmpireId !== null && defenderEmpireId !== undefined) {
+      galaxy.lastDamagedBy = galaxy.lastDamagedBy ?? {};
+      galaxy.lastDamagedBy[defenderEmpireId] = attackerEmpireId;
+    }
     planet.colonizedBy = attackerEmpireId;
     planet.population = result.survivingTroops;
     planet.sliders = { ship: 20, def: 10, ind: 30, eco: 20, tech: 20 };
@@ -113,6 +120,10 @@ export function applyBioAttack(galaxy, attackerEmpire, defenderEmpire, planet) {
 
   let depopulated = false;
   if (planet.population <= 0) {
+    // Kill-Zuordnung für den Highscore (ROADMAP v0.11), siehe js/economy.js
+    // resolveAllCombats und js/victory.js checkGameEnd/computeScore.
+    galaxy.lastDamagedBy = galaxy.lastDamagedBy ?? {};
+    galaxy.lastDamagedBy[defenderEmpire.id] = attackerEmpire.id;
     planet.colonizedBy = null;
     depopulated = true;
   }

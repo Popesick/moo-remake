@@ -102,6 +102,9 @@ export function resolveOrionGuardianCombat(galaxy) {
   if (result.guardianDefeated) {
     galaxy.orion.guardianAlive = false;
     rewardWinnerId = applyGuardianVictoryRewards(galaxy, result, empireIds);
+    // Für den Highscore (ROADMAP v0.11): +100 Punkte für die Zerstörung des
+    // Guardian, siehe js/victory.js computeScore.
+    galaxy.orion.defeatedByEmpireId = rewardWinnerId;
   }
 
   return { ...result, systemId, empireIds, isGuardianBattle: true, monsterName: GUARDIAN_STATS.name, rewardWinnerId };

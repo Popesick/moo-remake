@@ -20,6 +20,7 @@ import { getPersonality } from "./data/aiPersonality.js";
 import { aiAcceptsTradeOffer } from "./ai.js";
 import { resolveCouncilVote } from "./council.js";
 import { computeScore } from "./victory.js";
+import { recordHallOfFameEntry, loadHallOfFame } from "./hallOfFame.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
@@ -41,6 +42,9 @@ import {
   renderCouncilDialog,
   openCouncilDialog,
   closeCouncilDialog,
+  renderHallOfFame,
+  openHallOfFameDialog,
+  closeHallOfFameDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -338,7 +342,9 @@ const councilCallbacks = {
     if (result.outcome === "playerVictory" || result.outcome === "aiVictory") {
       const scores = gameState.galaxy.empires.map((e) => ({ empireId: e.id, score: computeScore(gameState.galaxy, e) }));
       gameState.galaxy.gameEndAnnounced = true;
-      renderGameEnd({ reason: "diplomatic", winnerEmpireId: result.winner.id, scores }, gameState.galaxy);
+      const diplomaticGameEnd = { reason: "diplomatic", winnerEmpireId: result.winner.id, scores };
+      recordHallOfFameEntry(gameState.galaxy, diplomaticGameEnd);
+      renderGameEnd(diplomaticGameEnd, gameState.galaxy);
       openGameEndDialog();
       return;
     }
@@ -367,6 +373,7 @@ function endTurn() {
   const playerEmpire = getPlayerEmpire();
 
   if (gameEnd) {
+    recordHallOfFameEntry(gameState.galaxy, gameEnd);
     renderGameEnd(gameEnd, gameState.galaxy);
     openGameEndDialog();
     return;
@@ -500,6 +507,12 @@ function setupDialogAndButtons() {
   document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacyDialog);
 
   document.getElementById("btn-home").addEventListener("click", goToHomeSystem);
+
+  document.getElementById("btn-halloffame").addEventListener("click", () => {
+    renderHallOfFame(loadHallOfFame());
+    openHallOfFameDialog();
+  });
+  document.getElementById("halloffame-close").addEventListener("click", closeHallOfFameDialog);
 
   document.getElementById("gameend-close").addEventListener("click", closeGameEndDialog);
 

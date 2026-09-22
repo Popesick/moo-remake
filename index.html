@@ -17,6 +17,7 @@
         <button id="btn-shipdesign">Schiffsdesign</button>
         <button id="btn-diplomacy">Diplomatie &amp; Spionage</button>
         <button id="btn-home">Heimatsystem</button>
+        <button id="btn-halloffame">Hall of Fame</button>
         <button id="btn-end-turn">Runde beenden</button>
         <button id="btn-new-game">Neue Galaxie</button>
         <button id="btn-save">Speichern</button>
@@ -140,6 +141,22 @@
         <h2>Galaktischer Rat</h2>
         <div id="council-body"></div>
         <div class="dialog-actions" id="council-actions"></div>
+      </div>
+    </div>
+
+    <div id="halloffame-dialog" class="dialog-overlay" hidden>
+      <div class="dialog dialog-wide">
+        <h2>Hall of Fame</h2>
+        <p class="dialog-hint">
+          Die besten Partien dieses Browsers, sortiert nach Highscore (siehe
+          design-analyse.docx: Basiswert nach Galaxiegröße, minus Runden,
+          plus Kolonisten, Techstufen, eliminierte Fraktionen und Guardian
+          of Orion).
+        </p>
+        <div id="halloffame-list"></div>
+        <div class="dialog-actions">
+          <button id="halloffame-close">Schließen</button>
+        </div>
       </div>
     </div>
 

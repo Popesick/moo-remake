@@ -184,9 +184,29 @@ spielbar von der Kolonisierung bis zum Sieg.
   genau ein Guardian-/Monster-Gefecht pro Runde ohne persistenten Schaden
   über mehrere Runden hinweg.
 
+- **v0.11 – Highscore/Hall-of-Fame-Formel (inkl. Guardian-/Kill-Boni)**
+  Die Score-Formel (Basiswert nach Galaxiegröße, minus Runden, plus
+  Kolonisten, plus 3 pro Techstufe) war seit dem Prototyp vollständig, bis
+  auf die beiden Boni, die eine echte Kill-Zuordnung bzw. das Orion-System
+  voraussetzten: +50 pro eliminierter Konkurrenz-Fraktion und +100 für die
+  Zerstörung des Guardian of Orion. Beides ist jetzt ergänzt. Kill-Zuordnung
+  läuft über einen neuen `galaxy.lastDamagedBy`-Verlauf, den Flottengefechte
+  (siegreiches Imperium), Invasionen und tödliche Bioangriffe aktualisieren;
+  wird ein Imperium eliminiert, wird die Elimination dem zuletzt
+  eingetragenen Angreifer gutgeschrieben. Der Guardian-Bonus greift über
+  `galaxy.orion.defeatedByEmpireId` (siehe v0.10). Beide Boni erscheinen im
+  Spielende-Dialog als eigene Zeile pro Imperium.
+
+  Zusätzlich: eine persistente Hall of Fame (`localStorage`, unabhängig vom
+  Spielstand) protokolliert das Siegerimperium jeder abgeschlossenen Partie
+  (Score, Rundenanzahl, Galaxiegröße, Sieggrund, Datum) und zeigt die besten
+  20 sortiert nach Punktzahl über einen neuen Topbar-Button. *Vereinfacht:*
+  Elimination wird stets dem letzten Angreifer zugeschrieben (keine anteilige
+  Zuordnung bei mehreren Beteiligten); die Hall of Fame speichert nur das
+  jeweilige Siegerimperium, nicht die volle Abschlusstabelle aller Partien.
+
 ## Weitere Post-Prototyp-Releases
 
-- v0.11 Highscore/Hall-of-Fame-Formel (inkl. Guardian-/Kill-Boni)
 - Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign
   neuer Schiffsklassen im Spielverlauf, Beam-Distanzabfall
 

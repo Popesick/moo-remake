@@ -15,6 +15,8 @@ import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import { COUNCIL_MAJORITY_RATIO } from "./data/diplomacyOptions.js";
 import { DEFAULT_TRAVEL_RANGE_PARSEC, UNLIMITED_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import { isOrionGuarded } from "./orion.js";
+import { killCountFor, ELIMINATION_KILL_BONUS, GUARDIAN_KILL_BONUS } from "./victory.js";
+import { GALAXY_SIZES } from "./galaxyGen.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -730,6 +732,21 @@ export function renderGameEnd(gameEnd, galaxy) {
     const row = document.createElement("div");
     row.className = "design-row";
     row.innerHTML = `<div class="design-row-head"><strong>${race?.name ?? entry.empireId}${empire?.id === gameEnd.winnerEmpireId ? " 🏆" : ""}</strong><span>${empire?.eliminated ? "Eliminiert" : `${entry.score} Punkte`}</span></div>`;
+
+    if (!empire?.eliminated) {
+      const killCount = killCountFor(galaxy, entry.empireId);
+      const guardianKilled = galaxy.orion?.defeatedByEmpireId === entry.empireId;
+      if (killCount > 0 || guardianKilled) {
+        const bonusLine = document.createElement("div");
+        bonusLine.className = "design-row-stats";
+        const parts = [];
+        if (killCount > 0) parts.push(`${killCount}× Fraktion eliminiert (+${killCount * ELIMINATION_KILL_BONUS})`);
+        if (guardianKilled) parts.push(`Guardian of Orion besiegt (+${GUARDIAN_KILL_BONUS})`);
+        bonusLine.textContent = parts.join(" · ");
+        row.appendChild(bonusLine);
+      }
+    }
+
     container.appendChild(row);
   }
 }
@@ -740,6 +757,44 @@ export function openGameEndDialog() {
 
 export function closeGameEndDialog() {
   document.getElementById("gameend-dialog").hidden = true;
+}
+
+const GAME_END_REASON_LABELS = {
+  elimination: "Elimination",
+  diplomatic: "Diplomatie",
+  turnLimit: "Rundenlimit",
+};
+
+export function renderHallOfFame(entries) {
+  const container = document.getElementById("halloffame-list");
+  container.innerHTML = "";
+
+  if (entries.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "dialog-hint";
+    empty.textContent = "Noch keine abgeschlossenen Partien.";
+    container.appendChild(empty);
+    return;
+  }
+
+  entries.forEach((entry, i) => {
+    const race = getRace(entry.raceId);
+    const size = GALAXY_SIZES[entry.sizeId];
+    const date = new Date(entry.date).toLocaleDateString("de-DE");
+    const row = document.createElement("div");
+    row.className = "design-row";
+    row.innerHTML = `<div class="design-row-head"><strong>#${i + 1} ${race?.name ?? entry.raceId}${entry.isPlayer ? " (Du)" : " (KI)"}</strong><span>${entry.score} Punkte</span></div>
+      <div class="design-row-stats">${size?.label ?? entry.sizeId} · ${entry.empireCount} Imperien · Runde ${entry.turn} · ${GAME_END_REASON_LABELS[entry.reason] ?? entry.reason} · ${date}</div>`;
+    container.appendChild(row);
+  });
+}
+
+export function openHallOfFameDialog() {
+  document.getElementById("halloffame-dialog").hidden = false;
+}
+
+export function closeHallOfFameDialog() {
+  document.getElementById("halloffame-dialog").hidden = true;
 }
 
 // Zeigt eine fällige Ratssitzung: die beiden Kandidaten mit ihrer

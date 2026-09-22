@@ -316,6 +316,17 @@ function resolveAllCombats(galaxy) {
       });
     }
 
+    // Kill-Zuordnung für den Highscore (ROADMAP v0.11): bei entscheidendem
+    // Ausgang gilt der Sieger als letzter Angreifer der Verlierer – wird bei
+    // deren Elimination für den +50-Punkte-Bonus ausgewertet, siehe
+    // js/victory.js checkGameEnd/computeScore.
+    if (result.winnerEmpireId !== null) {
+      galaxy.lastDamagedBy = galaxy.lastDamagedBy ?? {};
+      for (const id of result.empireIds) {
+        if (id !== result.winnerEmpireId) galaxy.lastDamagedBy[id] = result.winnerEmpireId;
+      }
+    }
+
     reports.push({ systemId, ...result });
   }
 
