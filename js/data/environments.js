@@ -1,10 +1,13 @@
 // Planetare Umweltkategorien, siehe docs/design-analyse.docx ("Planetare
-// Eigenschaften, Habitabilität und mineralischer Reichtum").
-// techReq = Stufe der Planetologie-Forschung, die zur Kolonisierung nötig ist
-// (0 = ohne Forschung besiedelbar). habitability = relativer Wachstums-
-// Basiswert für die Bevölkerungs-Glockenkurve aus v0.2 (100 = Referenzwert
-// Terranisch/Ozean), grobe Ableitung aus der Textbeschreibung, nicht aus
-// exakten Originalwerten.
+// Eigenschaften, Habitabilität und mineralischer Reichtum"). techReq = Level
+// der Planetologie-Technologie, die zur Kolonisierung nötig ist (0 = ohne
+// Forschung besiedelbar), abgeglichen mit den konkreten "Controlled ... Env."
+// Technologien aus docs/techtree-analyse.docx (js/data/techTree.js). Für
+// Barren und Inferno ist dort keine eigene Kolonisierungs-Technologie
+// gelistet, sie gelten daher als von Beginn an besiedelbar.
+// habitability = relativer Wachstums-Basiswert für die Bevölkerungs-
+// Glockenkurve (100 = Referenzwert Terranisch/Ozean), grobe Ableitung aus
+// der Textbeschreibung, nicht aus exakten Originalwerten.
 export const ENVIRONMENTS = [
   {
     id: "terran",
@@ -16,42 +19,42 @@ export const ENVIRONMENTS = [
   {
     id: "tundra",
     name: "Tundra",
-    techReq: 2,
+    techReq: 6,
     habitability: 70,
     note: "Reduziertes Wachstum, dient oft als Basis für weiteres Terraforming.",
   },
   {
     id: "barren",
     name: "Barren (Karg)",
-    techReq: 1,
+    techReq: 0,
     habitability: 40,
     note: "Keine natürliche Atmosphäre, stark reduziertes Wachstum.",
   },
   {
     id: "dead",
     name: "Dead (Tot)",
-    techReq: 2,
+    techReq: 9,
     habitability: 35,
     note: "Keine Biosphäre, stark reduziertes Wachstum.",
   },
   {
     id: "inferno",
     name: "Inferno",
-    techReq: 3,
+    techReq: 0,
     habitability: 25,
     note: "Extreme Hitze, erfordert fortgeschrittene planetare Adaption.",
   },
   {
     id: "toxic",
     name: "Toxic (Toxisch)",
-    techReq: 4,
+    techReq: 15,
     habitability: 18,
     note: "Extrem lebensfeindlich, höchste technologische Hürde vor radioaktiven Welten.",
   },
   {
     id: "radiated",
     name: "Radiated (Radioaktiv)",
-    techReq: 5,
+    techReq: 18,
     habitability: 12,
     note: "Erfordert höchste Basis-Planetologie-Forschung für eine Besiedlung.",
   },

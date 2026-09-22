@@ -3,7 +3,7 @@ import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
 import { render, pickSystemAt, fitGalaxyToView } from "./render.js";
 import { simulateTurn, colonizePlanet, computePlanetProduction } from "./economy.js";
 import { normalizeSliders } from "./data/economy.js";
-import { normalizeAllocation } from "./research.js";
+import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
@@ -75,12 +75,20 @@ function startNewGalaxy({ sizeId, empireCount, difficultyId, seed }) {
   saveGame();
 }
 
-function onResearchAllocationChange(disciplineId, value) {
-  const player = getPlayerEmpire();
-  player.research.allocation[disciplineId] = value;
-  player.research.allocation = normalizeAllocation(player.research.allocation);
-  renderResearchDialog(gameState.galaxy, onResearchAllocationChange);
-}
+const researchCallbacks = {
+  onAllocationChange(disciplineId, value) {
+    const player = getPlayerEmpire();
+    player.research.allocation[disciplineId] = value;
+    player.research.allocation = normalizeAllocation(player.research.allocation);
+    renderResearchDialog(gameState.galaxy, researchCallbacks);
+  },
+  onSelectTarget(disciplineId, techId) {
+    const player = getPlayerEmpire();
+    selectResearchTarget(player, disciplineId, techId);
+    renderResearchDialog(gameState.galaxy, researchCallbacks);
+    saveGame();
+  },
+};
 
 function endTurn() {
   if (!gameState.galaxy) return;
@@ -172,7 +180,7 @@ function setupDialogAndButtons() {
 
   document.getElementById("btn-research").addEventListener("click", () => {
     if (!gameState.galaxy) return;
-    renderResearchDialog(gameState.galaxy, onResearchAllocationChange);
+    renderResearchDialog(gameState.galaxy, researchCallbacks);
     openResearchDialog();
   });
   document.getElementById("research-close").addEventListener("click", closeResearchDialog);

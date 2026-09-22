@@ -2,14 +2,14 @@ import { getEnvironment } from "./data/environments.js";
 import { getRichness } from "./data/richness.js";
 import { getPlanetSize } from "./data/planetSizes.js";
 import { getDifficulty } from "./data/difficulty.js";
-import { initEmpireResearch, processResearchTurn } from "./research.js";
+import { initEmpireResearch, processResearchTurn, applyTechEffect } from "./research.js";
 import {
   BASE_BC_PER_POP,
   BASE_BC_PER_FACTORY,
   ROBOTIC_CONTROLS_BASE,
   FACTORY_COST_BC,
   WASTE_PER_FACTORY,
-  ECO_CLEANUP_BC_PER_WASTE,
+  DEFAULT_ECO_CLEANUP_UNITS_PER_BC,
   MAX_GROWTH_RATE,
   COLONY_SHIP_COST_BC,
   START_COLONY_POPULATION,
@@ -43,14 +43,19 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     defenseBudget: 0,
     planetologyTechLevel: 0,
     roboticControlsLevel: ROBOTIC_CONTROLS_BASE,
-    factoryCostMultiplier: 1,
-    ecoCleanupCostMultiplier: 1,
+    factoryCostBC: FACTORY_COST_BC,
+    wasteGenerationMultiplier: 1,
+    ecoCleanupUnitsPerBC: DEFAULT_ECO_CLEANUP_UNITS_PER_BC,
     popCapacityMultiplier: 1,
     popCapacityFlatBonus: 0,
     researchCostFactor: difficulty.researchCostFactor,
     lastResearchIncome: 0,
   };
-  base.research = initEmpireResearch(seed, empire.id);
+  const { research, initialBreakthroughs } = initEmpireResearch(seed, empire.id, empire.raceId);
+  base.research = research;
+  // Level-1-Technologien gelten laut Analyse-Dokument als zu Spielbeginn
+  // bereits erforscht (initiales Forschungslevel ≈ 1) und wirken sofort.
+  for (const tech of initialBreakthroughs) applyTechEffect(base, tech);
   return base;
 }
 
@@ -73,12 +78,12 @@ export function computePlanetProduction(planet, empire) {
     tech: (totalBC * s.tech) / 100,
   };
 
-  const factoryCostMultiplier = empire?.factoryCostMultiplier ?? 1;
-  const ecoCleanupCostMultiplier = empire?.ecoCleanupCostMultiplier ?? 1;
+  const factoryCostBC = empire?.factoryCostBC ?? FACTORY_COST_BC;
+  const wasteGenerationMultiplier = empire?.wasteGenerationMultiplier ?? 1;
+  const ecoCleanupUnitsPerBC = empire?.ecoCleanupUnitsPerBC ?? DEFAULT_ECO_CLEANUP_UNITS_PER_BC;
 
-  const wasteGenerated = activeFactories * WASTE_PER_FACTORY;
-  const cleanupCostPerWaste = ECO_CLEANUP_BC_PER_WASTE * ecoCleanupCostMultiplier;
-  const wasteCleanable = cleanupCostPerWaste > 0 ? bc.eco / cleanupCostPerWaste : wasteGenerated;
+  const wasteGenerated = activeFactories * WASTE_PER_FACTORY * wasteGenerationMultiplier;
+  const wasteCleanable = bc.eco * ecoCleanupUnitsPerBC;
   const wasteRemaining = Math.max(0, wasteGenerated - wasteCleanable);
   const pollutionPenalty = wasteGenerated > 0 ? Math.min(0.5, wasteRemaining / wasteGenerated) : 0;
 
@@ -90,7 +95,7 @@ export function computePlanetProduction(planet, empire) {
     wasteGenerated,
     wasteRemaining,
     pollutionPenalty,
-    factoryCostBC: FACTORY_COST_BC * factoryCostMultiplier,
+    factoryCostBC,
     roboticControls,
   };
 }

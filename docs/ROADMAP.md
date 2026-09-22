@@ -1,8 +1,10 @@
 # Roadmap – MoO Remake (Browser 4X)
 
 Ziel: Ein im Browser lauffähiges 4X-Strategiespiel, das sich mechanisch eng an
-Master of Orion (1993) anlehnt. Grundlage ist die Analyse in
-[`design-analyse.docx`](design-analyse.docx). Umfang für den ersten
+Master of Orion (1993) anlehnt. Grundlage sind die Analysen in
+[`design-analyse.docx`](design-analyse.docx) (Gesamtübersicht) und
+[`techtree-analyse.docx`](techtree-analyse.docx) (vollständiger Technologiebaum
+mit Kosten-/Durchbruchsformeln, siehe `js/data/techTree.js`). Umfang für den ersten
 spielbaren Prototyp: **Standard 4X-Kern** – vollständige Partie gegen KI,
 gewinnbar durch Elimination oder Punktzahl. Diplomatie, Spionage,
 Bodeninvasion, Galaktischer Rat und Orion-Wächter folgen erst nach dem

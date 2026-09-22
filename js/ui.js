@@ -6,12 +6,21 @@ import { getRace } from "./data/races.js";
 import { computePlanetProduction, isColonizable, maxPopulation } from "./economy.js";
 import { DISCIPLINES } from "./data/disciplines.js";
 import { getTech } from "./data/techTree.js";
-import { costForTech } from "./research.js";
+import { costForTech, getCandidateTechs } from "./research.js";
+import { getResearchCostFactor } from "./data/raceResearch.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
 function fmt(n, digits = 1) {
   return n.toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function envIconPath(envId) {
+  return `assets/images/planets/env_${envId}.png`;
+}
+
+function racePortraitPath(raceId) {
+  return `assets/images/races/race_${raceId}.png`;
 }
 
 function buildOwnedPlanetCard(system, planet, empire, callbacks) {
@@ -24,15 +33,36 @@ function buildOwnedPlanetCard(system, planet, empire, callbacks) {
 
   const li = document.createElement("li");
 
+  const head = document.createElement("div");
+  head.className = "planet-card-head";
+
+  const icon = document.createElement("img");
+  icon.className = "planet-icon";
+  icon.src = envIconPath(env.id);
+  icon.alt = env.name;
+  head.appendChild(icon);
+
+  const headText = document.createElement("div");
+
   const name = document.createElement("div");
   name.className = "planet-name";
   name.textContent = `${system.name} ${planet.name}${planet.isHomeworld ? " (Heimatwelt)" : ""}`;
-  li.appendChild(name);
+  headText.appendChild(name);
 
   const owner = document.createElement("div");
   owner.className = "planet-owner";
-  owner.innerHTML = `<span class="owner-dot" style="background:${race?.color ?? "#888"}"></span>${race?.name ?? "Unbekannt"}`;
-  li.appendChild(owner);
+  const portrait = document.createElement("img");
+  portrait.className = "owner-portrait";
+  portrait.src = racePortraitPath(empire?.raceId);
+  portrait.alt = race?.name ?? "Unbekannt";
+  owner.appendChild(portrait);
+  const ownerLabel = document.createElement("span");
+  ownerLabel.innerHTML = `<span class="owner-dot" style="background:${race?.color ?? "#888"}"></span>${race?.name ?? "Unbekannt"}`;
+  owner.appendChild(ownerLabel);
+  headText.appendChild(owner);
+
+  head.appendChild(headText);
+  li.appendChild(head);
 
   const meta = document.createElement("div");
   meta.className = "planet-meta";
@@ -99,10 +129,19 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks) {
 
   const li = document.createElement("li");
 
+  const head = document.createElement("div");
+  head.className = "planet-card-head";
+  const icon = document.createElement("img");
+  icon.className = "planet-icon";
+  icon.src = envIconPath(env.id);
+  icon.alt = env.name;
+  head.appendChild(icon);
+
   const name = document.createElement("div");
   name.className = "planet-name";
   name.textContent = `${system.name} ${planet.name}`;
-  li.appendChild(name);
+  head.appendChild(name);
+  li.appendChild(head);
 
   const meta = document.createElement("div");
   meta.className = "planet-meta";
@@ -124,7 +163,9 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks) {
   } else {
     const hint = document.createElement("div");
     hint.className = "colonize-hint";
-    hint.textContent = `Erfordert Planetologie-Stufe ${env.techReq} zur Kolonisierung (noch nicht erforschbar, siehe Roadmap v0.3).`;
+    hint.textContent = env.techReq > 0
+      ? `Erfordert eine Planetologie-Technologie auf Stufe ${env.techReq} (siehe Forschungsdialog).`
+      : "Noch nicht kolonisierbar.";
     li.appendChild(hint);
   }
 
@@ -191,13 +232,15 @@ export function updateTopbarInfo(galaxy) {
   }
 }
 
-function buildDisciplineCard(discipline, empire, onAllocationChange) {
+function buildDisciplineCard(discipline, empire, callbacks) {
   const research = empire.research;
   const level = research.techLevel[discipline.id];
   const targetId = research.currentTarget[discipline.id];
   const target = targetId ? getTech(targetId) : null;
   const progress = research.progress[discipline.id] ?? 0;
   const allocation = research.allocation[discipline.id] ?? 0;
+  const raceFactor = getResearchCostFactor(empire.raceId, discipline.id);
+  const candidates = getCandidateTechs(empire, discipline.id);
 
   const card = document.createElement("div");
   card.className = "discipline-card";
@@ -207,11 +250,13 @@ function buildDisciplineCard(discipline, empire, onAllocationChange) {
   header.innerHTML = `<span>${discipline.name}</span><span>Stufe ${level}</span>`;
   card.appendChild(header);
 
-  const targetLine = document.createElement("div");
-  targetLine.className = "discipline-target";
   if (target) {
-    const cost = costForTech(target, empire.researchCostFactor ?? 26);
+    const cost = costForTech(target, empire.researchCostFactor ?? 26, raceFactor);
+
+    const targetLine = document.createElement("div");
+    targetLine.className = "discipline-target";
     targetLine.textContent = `Ziel: ${target.name} (Stufe ${target.level}) – ${target.description}`;
+    card.appendChild(targetLine);
 
     const track = document.createElement("div");
     track.className = "discipline-progress-track";
@@ -219,15 +264,34 @@ function buildDisciplineCard(discipline, empire, onAllocationChange) {
     fill.className = "discipline-progress-fill";
     fill.style.width = `${Math.min(100, (progress / cost) * 100)}%`;
     track.appendChild(fill);
-
-    card.appendChild(targetLine);
     card.appendChild(track);
 
     const costLine = document.createElement("div");
     costLine.className = "discipline-target";
     costLine.textContent = `${fmt(progress, 0)} / ${fmt(cost, 0)} RP`;
     card.appendChild(costLine);
+
+    if (candidates.length > 1) {
+      const pickerLabel = document.createElement("div");
+      pickerLabel.className = "discipline-target";
+      pickerLabel.textContent = "Alternative Ziele in dieser Rung:";
+      card.appendChild(pickerLabel);
+
+      const picker = document.createElement("div");
+      picker.className = "tech-picker";
+      for (const candidate of candidates) {
+        const btn = document.createElement("button");
+        btn.className = "btn-tech-choice";
+        btn.textContent = `${candidate.name} (Lv. ${candidate.level})`;
+        if (candidate.id === target.id) btn.classList.add("active");
+        btn.addEventListener("click", () => callbacks.onSelectTarget(discipline.id, candidate.id));
+        picker.appendChild(btn);
+      }
+      card.appendChild(picker);
+    }
   } else {
+    const targetLine = document.createElement("div");
+    targetLine.className = "discipline-target";
     targetLine.textContent = "Keine weiteren Technologien in dieser Disziplin verfügbar (Zufallsauswahl dieser Partie).";
     card.appendChild(targetLine);
   }
@@ -242,7 +306,7 @@ function buildDisciplineCard(discipline, empire, onAllocationChange) {
   input.min = "0";
   input.max = "100";
   input.value = String(Math.round(allocation));
-  input.addEventListener("input", () => onAllocationChange(discipline.id, Number(input.value)));
+  input.addEventListener("input", () => callbacks.onAllocationChange(discipline.id, Number(input.value)));
   row.appendChild(input);
   const value = document.createElement("span");
   value.textContent = `${Math.round(allocation)}%`;
@@ -252,13 +316,13 @@ function buildDisciplineCard(discipline, empire, onAllocationChange) {
   return card;
 }
 
-export function renderResearchDialog(galaxy, onAllocationChange) {
+export function renderResearchDialog(galaxy, callbacks) {
   const container = document.getElementById("research-disciplines");
   container.innerHTML = "";
   const player = galaxy.empires.find((e) => e.isPlayer);
   if (!player) return;
   for (const discipline of DISCIPLINES) {
-    container.appendChild(buildDisciplineCard(discipline, player, onAllocationChange));
+    container.appendChild(buildDisciplineCard(discipline, player, callbacks));
   }
 }
 

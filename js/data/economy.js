@@ -1,16 +1,15 @@
-// Wirtschafts-Konstanten für den Prototyp. Die Original-Formeln im
-// Analyse-Dokument enthielten an mehreren Stellen nicht extrahierbare
-// Zahlenwerte (verloren gegangene Formel-Grafiken/OMML). Die Werte hier
-// sind plausible, spielbare Platzhalter im Sinne des beschriebenen Systems
-// (5 Slider, Fabrik-Skalierung über Robotic Controls, Verschmutzung,
-// Glockenkurven-Wachstum mit Scheitel bei 50% Kapazität) und über diese
-// Datei zentral tunbar.
-export const BASE_BC_PER_POP = 0.25;
+// Wirtschafts-Konstanten für den Prototyp. BASE_BC_PER_POP, BASE_BC_PER_FACTORY
+// und FACTORY_COST_BC sind aus docs/techtree-analyse.docx belegt ("Jeder
+// Arbeiter erwirtschaftet initial 0,5 BC, während jede aktive Fabrik exakt
+// 1 BC produziert"; Fabrik-Basiskosten 10 BC vor Industrial-Tech-Rabatten).
+// Die übrigen Werte (Wachstumsrate, Kolonieschiff-Kosten, Start-Bevölkerung)
+// sind eigene, spielbare Platzhalter und über diese Datei zentral tunbar.
+export const BASE_BC_PER_POP = 0.5;
 export const BASE_BC_PER_FACTORY = 1;
-export const ROBOTIC_CONTROLS_BASE = 2; // Fabriken pro Bevölkerungseinheit, siehe v0.3 (skaliert bis 7)
-export const FACTORY_COST_BC = 20;
+export const ROBOTIC_CONTROLS_BASE = 2; // Fabriken pro Bevölkerungseinheit vor Tech (Robotics Controls 2, Level 1)
+export const FACTORY_COST_BC = 10;
 export const WASTE_PER_FACTORY = 0.25;
-export const ECO_CLEANUP_BC_PER_WASTE = 0.5;
+export const DEFAULT_ECO_CLEANUP_UNITS_PER_BC = 1; // 1 BC beseitigt 1 Einheit Verschmutzung vor Eco-Restoration-Techs
 export const MAX_GROWTH_RATE = 0.18; // Wachstumsrate am Scheitelpunkt (50% Kapazität) pro Runde
 export const COLONY_SHIP_COST_BC = 60;
 export const START_COLONY_POPULATION = 1;
