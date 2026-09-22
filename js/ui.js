@@ -94,6 +94,36 @@ function buildOwnedPlanetCard(system, planet, empire, callbacks) {
     li.appendChild(pollutionLine);
   }
 
+  if (empire?.isPlayer && callbacks.onProductionChange) {
+    const prodRow = document.createElement("label");
+    prodRow.className = "design-field";
+    prodRow.textContent = "Schiff-Slider baut:";
+    const select = document.createElement("select");
+    const colonyOpt = document.createElement("option");
+    colonyOpt.value = "";
+    colonyOpt.textContent = "Kolonieschiff (Standard)";
+    if (!planet.productionTarget) colonyOpt.selected = true;
+    select.appendChild(colonyOpt);
+    for (const design of empire.shipDesigns) {
+      const opt = document.createElement("option");
+      opt.value = design.id;
+      opt.textContent = design.name;
+      if (planet.productionTarget === design.id) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => {
+      callbacks.onProductionChange(system.id, planet.id, select.value || null);
+    });
+    prodRow.appendChild(select);
+    li.appendChild(prodRow);
+    if (planet.shipCarry) {
+      const carryLine = document.createElement("div");
+      carryLine.className = "production-line";
+      carryLine.textContent = `Baufortschritt: ${fmt(planet.shipCarry, 0)} BC angespart`;
+      li.appendChild(carryLine);
+    }
+  }
+
   for (const key of ["ship", "def", "ind", "eco", "tech"]) {
     const row = document.createElement("div");
     row.className = "slider-row";
@@ -192,14 +222,13 @@ export function renderSystemPanel(system, galaxy, callbacks) {
   const list = document.getElementById("system-planets");
   list.innerHTML = "";
 
+  const playerEmpire = galaxy.empires.find((e) => e.isPlayer);
+
   if (system.planets.length === 0) {
     const li = document.createElement("li");
     li.textContent = "Keine Planeten in diesem System.";
     list.appendChild(li);
-    return;
   }
-
-  const playerEmpire = galaxy.empires.find((e) => e.isPlayer);
 
   for (const planet of system.planets) {
     if (planet.colonizedBy !== null && planet.colonizedBy !== undefined) {
@@ -209,6 +238,82 @@ export function renderSystemPanel(system, galaxy, callbacks) {
       list.appendChild(buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks));
     }
   }
+
+  renderFleetSection(system, galaxy, playerEmpire, callbacks);
+}
+
+function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
+  const container = document.getElementById("system-fleets");
+  container.innerHTML = "";
+  if (!playerEmpire) return;
+
+  const stationary = galaxy.fleets.filter(
+    (f) => f.systemId === system.id && f.ownerEmpireId === playerEmpire.id && !f.destinationSystemId
+  );
+  const incoming = galaxy.fleets.filter(
+    (f) => f.destinationSystemId === system.id && f.ownerEmpireId === playerEmpire.id
+  );
+
+  if (stationary.length === 0 && incoming.length === 0) return;
+
+  const section = document.createElement("div");
+  section.className = "fleet-section";
+  const heading = document.createElement("h3");
+  heading.textContent = "Flotten";
+  heading.style.margin = "0 0 0.4rem";
+  heading.style.fontSize = "0.95rem";
+  section.appendChild(heading);
+
+  for (const fleet of stationary) {
+    const card = document.createElement("div");
+    card.className = "fleet-card";
+    const title = document.createElement("div");
+    title.innerHTML = `<strong>Flotte ${fleet.id.replace("fleet-", "#")}</strong>`;
+    card.appendChild(title);
+
+    for (const stack of fleet.stacks) {
+      const design = playerEmpire.shipDesigns.find((d) => d.id === stack.designId);
+      const row = document.createElement("div");
+      row.className = "fleet-stack-row";
+      row.innerHTML = `<span>${stack.count}× ${design?.name ?? "Unbekanntes Design"}</span>`;
+      if (stack.count > 1) {
+        const splitInput = document.createElement("input");
+        splitInput.type = "number";
+        splitInput.min = "1";
+        splitInput.max = String(stack.count - 1);
+        splitInput.value = "1";
+        const splitBtn = document.createElement("button");
+        splitBtn.textContent = "Aufteilen";
+        splitBtn.addEventListener("click", () => {
+          callbacks.onSplitStack(fleet.id, stack.designId, Number(splitInput.value));
+        });
+        row.appendChild(splitInput);
+        row.appendChild(splitBtn);
+      }
+      card.appendChild(row);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "fleet-actions";
+    const moveBtn = document.createElement("button");
+    moveBtn.textContent = "Verlegen (Ziel auf Karte klicken)";
+    moveBtn.addEventListener("click", () => callbacks.onArmFleetMove(fleet.id));
+    actions.appendChild(moveBtn);
+    card.appendChild(actions);
+
+    section.appendChild(card);
+  }
+
+  for (const fleet of incoming) {
+    const eta = Math.max(1, Math.ceil(fleet.travelRemaining / fleet.travelSpeed));
+    const card = document.createElement("div");
+    card.className = "fleet-card";
+    const shipCount = fleet.stacks.reduce((s, st) => s + st.count, 0);
+    card.textContent = `Ankommend: ${shipCount} Schiff(e), ETA ${eta} Runde${eta === 1 ? "" : "n"}`;
+    section.appendChild(card);
+  }
+
+  container.appendChild(section);
 }
 
 export function updateTopbarInfo(galaxy) {

@@ -164,6 +164,9 @@ export function applyTechEffect(empire, tech) {
     case "popCapacityFlatBonus":
       empire.popCapacityFlatBonus = Math.max(empire.popCapacityFlatBonus ?? 0, effect.value);
       break;
+    case "travelSpeed":
+      empire.travelSpeedParsec = Math.max(empire.travelSpeedParsec ?? 1, effect.value);
+      break;
     case "flavor":
     default:
       break; // wartet auf Schiffsdesign/Kampf/Bodeninvasion (v0.4/v0.5/v0.7)

@@ -1,7 +1,7 @@
 const STORAGE_KEY = "moo-remake:savegame";
 // Erhöhen, sobald sich die Galaxie-/Spielstand-Struktur inkompatibel ändert
 // (Prototyp-Phase: keine Migration, ältere Stände werden dann verworfen).
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 
 export const gameState = {
   galaxy: null,

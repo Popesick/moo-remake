@@ -14,6 +14,7 @@
       <div id="topbar-stats"></div>
       <div id="topbar-actions">
         <button id="btn-research">Forschung</button>
+        <button id="btn-shipdesign">Schiffsdesign</button>
         <button id="btn-end-turn">Runde beenden</button>
         <button id="btn-new-game">Neue Galaxie</button>
         <button id="btn-save">Speichern</button>
@@ -30,6 +31,7 @@
           <h2 id="system-name"></h2>
           <div id="system-star"></div>
           <ul id="system-planets"></ul>
+          <div id="system-fleets"></div>
         </div>
       </aside>
     </main>
@@ -88,6 +90,24 @@
         <div id="research-disciplines"></div>
         <div class="dialog-actions">
           <button id="research-close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="shipdesign-dialog" class="dialog-overlay" hidden>
+      <div class="dialog dialog-wide">
+        <h2>Schiffsdesign</h2>
+        <p class="dialog-hint">
+          Bis zu 6 aktive Designs gleichzeitig (hartes Limit). Um ein neues
+          Design zu erstellen, muss zuerst ein bestehendes verschrottet
+          werden. Komponenten stehen erst nach entsprechender Forschung zur
+          Verfügung.
+        </p>
+        <div id="shipdesign-list"></div>
+        <h3>Neues Design</h3>
+        <div id="shipdesign-editor"></div>
+        <div class="dialog-actions">
+          <button id="shipdesign-close">Schließen</button>
         </div>
       </div>
     </div>

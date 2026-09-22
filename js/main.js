@@ -4,6 +4,8 @@ import { render, pickSystemAt, fitGalaxyToView } from "./render.js";
 import { simulateTurn, colonizePlanet, computePlanetProduction } from "./economy.js";
 import { normalizeSliders } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
+import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
+import { sendFleet, splitStack } from "./fleets.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
@@ -14,6 +16,7 @@ import {
   closeResearchDialog,
   renderResearchDialog,
 } from "./ui.js";
+import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
 const canvas = document.getElementById("galaxy-canvas");
 
@@ -46,6 +49,28 @@ const panelCallbacks = {
     refreshSidePanel();
     requestRender();
     saveGame();
+  },
+  onProductionChange(systemId, planetId, target) {
+    const system = findSystem(gameState.galaxy, systemId);
+    const planet = system?.planets.find((p) => p.id === planetId);
+    if (!planet) return;
+    planet.productionTarget = target;
+    planet.shipCarry = 0;
+    refreshSidePanel();
+    saveGame();
+  },
+  onSplitStack(fleetId, designId, count) {
+    const result = splitStack(gameState.galaxy, fleetId, designId, count);
+    if (!result.ok) {
+      flashTopbar(result.reason);
+      return;
+    }
+    refreshSidePanel();
+    saveGame();
+  },
+  onArmFleetMove(fleetId) {
+    gameState.pendingFleetMove = fleetId;
+    flashTopbar("Zielsystem auf der Karte anklicken …");
   },
 };
 
@@ -90,17 +115,45 @@ const researchCallbacks = {
   },
 };
 
+const shipDesignCallbacks = {
+  onCreateDesign(design) {
+    const player = getPlayerEmpire();
+    const result = addShipDesign(player, design);
+    if (result.ok) {
+      updateTopbarInfo(gameState.galaxy);
+      saveGame();
+    }
+    return result;
+  },
+  onScrap(designId) {
+    const player = getPlayerEmpire();
+    scrapShipDesign(player, designId);
+    renderShipDesignDialog(gameState.galaxy, shipDesignCallbacks);
+    saveGame();
+  },
+  onError(reason) {
+    flashTopbar(reason);
+  },
+};
+
 function endTurn() {
   if (!gameState.galaxy) return;
-  const { breakthroughsByEmpire } = simulateTurn(gameState.galaxy);
+  const { breakthroughsByEmpire, arrivals } = simulateTurn(gameState.galaxy);
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
   requestRender();
   saveGame();
 
-  const playerBreakthroughs = breakthroughsByEmpire.get(getPlayerEmpire().id);
+  const playerEmpire = getPlayerEmpire();
+  const playerBreakthroughs = breakthroughsByEmpire.get(playerEmpire.id);
   if (playerBreakthroughs?.length) {
     flashTopbar(`Durchbruch: ${playerBreakthroughs.map((t) => t.name).join(", ")}`);
+    return;
+  }
+  const playerArrivals = arrivals.filter((f) => f.ownerEmpireId === playerEmpire.id);
+  if (playerArrivals.length > 0) {
+    const system = findSystem(gameState.galaxy, playerArrivals[0].systemId);
+    flashTopbar(`Flotte in ${system?.name ?? "einem System"} angekommen.`);
   }
 }
 
@@ -140,6 +193,26 @@ function setupCanvasInteractions() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const system = pickSystemAt(canvas, gameState.galaxy, gameState.camera, x, y);
+
+    if (gameState.pendingFleetMove) {
+      const fleetId = gameState.pendingFleetMove;
+      gameState.pendingFleetMove = null;
+      if (!system) {
+        flashTopbar("Kein Zielsystem ausgewählt.");
+        return;
+      }
+      const player = getPlayerEmpire();
+      const result = sendFleet(gameState.galaxy, fleetId, system.id, player.travelSpeedParsec);
+      if (!result.ok) {
+        flashTopbar(result.reason);
+      } else {
+        flashTopbar(`Flotte unterwegs nach ${system.name}.`);
+        refreshSidePanel();
+        saveGame();
+      }
+      return;
+    }
+
     selectSystem(system);
   });
 
@@ -184,6 +257,13 @@ function setupDialogAndButtons() {
     openResearchDialog();
   });
   document.getElementById("research-close").addEventListener("click", closeResearchDialog);
+
+  document.getElementById("btn-shipdesign").addEventListener("click", () => {
+    if (!gameState.galaxy) return;
+    renderShipDesignDialog(gameState.galaxy, shipDesignCallbacks);
+    openShipDesignDialog();
+  });
+  document.getElementById("shipdesign-close").addEventListener("click", closeShipDesignDialog);
 
   document.getElementById("btn-save").addEventListener("click", () => {
     const ok = saveGame();

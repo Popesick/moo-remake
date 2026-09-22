@@ -136,6 +136,8 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
     empires,
     turn: 1,
     systems,
+    fleets: [],
+    nextFleetId: 1,
     createdAt: Date.now(),
   };
 }

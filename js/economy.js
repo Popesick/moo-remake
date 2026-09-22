@@ -3,6 +3,9 @@ import { getRichness } from "./data/richness.js";
 import { getPlanetSize } from "./data/planetSizes.js";
 import { getDifficulty } from "./data/difficulty.js";
 import { initEmpireResearch, processResearchTurn, applyTechEffect } from "./research.js";
+import { computeDesignStats } from "./shipDesign.js";
+import { addShipsToSystem, advanceFleets } from "./fleets.js";
+import { DEFAULT_TRAVEL_SPEED } from "./data/logistics.js";
 import {
   BASE_BC_PER_POP,
   BASE_BC_PER_FACTORY,
@@ -50,6 +53,8 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     popCapacityFlatBonus: 0,
     researchCostFactor: difficulty.researchCostFactor,
     lastResearchIncome: 0,
+    travelSpeedParsec: DEFAULT_TRAVEL_SPEED,
+    shipDesigns: [],
   };
   const { research, initialBreakthroughs } = initEmpireResearch(seed, empire.id, empire.raceId);
   base.research = research;
@@ -131,8 +136,23 @@ export function simulateTurn(galaxy) {
       const delta = empireDeltas.get(planet.colonizedBy);
       if (delta) {
         delta.techBC += prod.bc.tech;
-        delta.shipBC += prod.bc.ship;
         delta.defBC += prod.bc.def;
+
+        const design = planet.productionTarget
+          ? empire?.shipDesigns.find((d) => d.id === planet.productionTarget)
+          : null;
+        if (design) {
+          // Planet baut ein Kriegsschiff-Design statt Kolonieschiffe (siehe
+          // ROADMAP v0.4): Ship-Slider-BC fließt in dieses Design, fertige
+          // Schiffe erscheinen als Stack in einer Flotte im Heimatsystem.
+          const stats = computeDesignStats(design);
+          const fund = prod.bc.ship + (planet.shipCarry ?? 0);
+          const built = stats.costBC > 0 ? Math.floor(fund / stats.costBC) : 0;
+          planet.shipCarry = fund - built * stats.costBC;
+          if (built > 0) addShipsToSystem(galaxy, planet.colonizedBy, system.id, design.id, built);
+        } else {
+          delta.shipBC += prod.bc.ship;
+        }
       }
     }
   }
@@ -157,8 +177,10 @@ export function simulateTurn(galaxy) {
     if (breakthroughs.length > 0) breakthroughsByEmpire.set(empire.id, breakthroughs);
   }
 
+  const arrivals = advanceFleets(galaxy);
+
   galaxy.turn = turn + 1;
-  return { breakthroughsByEmpire };
+  return { breakthroughsByEmpire, arrivals };
 }
 
 export function colonizePlanet(galaxy, systemId, planetId, empireId) {

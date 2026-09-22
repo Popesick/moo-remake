@@ -120,6 +120,80 @@ export function render(canvas, galaxy, camera, selectedSystemId) {
       ctx.textAlign = "left";
     }
   }
+
+  renderFleets(ctx, galaxy, camera);
+}
+
+function fleetShipCount(fleet) {
+  return fleet.stacks.reduce((sum, s) => sum + s.count, 0);
+}
+
+function renderFleets(ctx, galaxy, camera) {
+  if (!galaxy.fleets) return;
+  const bySystem = new Map();
+
+  for (const fleet of galaxy.fleets) {
+    const owner = galaxy.empires.find((e) => e.id === fleet.ownerEmpireId);
+    const color = owner?.color ?? "#ffffff";
+
+    if (fleet.destinationSystemId) {
+      const origin = galaxy.systems.find((s) => s.id === (fleet.originSystemId ?? fleet.systemId));
+      const destination = galaxy.systems.find((s) => s.id === fleet.destinationSystemId);
+      if (!origin || !destination) continue;
+      const t = 1 - Math.max(0, fleet.travelRemaining) / Math.max(1, fleet.travelTotal);
+      const wx = origin.x + (destination.x - origin.x) * t;
+      const wy = origin.y + (destination.y - origin.y) * t;
+      const op = worldToScreen(camera, origin.x, origin.y);
+      const dp = worldToScreen(camera, destination.x, destination.y);
+      const fp = worldToScreen(camera, wx, wy);
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.35;
+      ctx.setLineDash([3, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(op.x, op.y);
+      ctx.lineTo(dp.x, dp.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(fp.x, fp.y - 4);
+      ctx.lineTo(fp.x + 4, fp.y + 3);
+      ctx.lineTo(fp.x - 4, fp.y + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    } else {
+      const list = bySystem.get(fleet.systemId) ?? [];
+      list.push({ fleet, color });
+      bySystem.set(fleet.systemId, list);
+    }
+  }
+
+  for (const [systemId, entries] of bySystem) {
+    const system = galaxy.systems.find((s) => s.id === systemId);
+    if (!system) continue;
+    const p = worldToScreen(camera, system.x, system.y);
+    const totalShips = entries.reduce((sum, e) => sum + fleetShipCount(e.fleet), 0);
+    if (totalShips === 0) continue;
+    const markerX = p.x - 12;
+    const markerY = p.y + 12;
+    ctx.fillStyle = entries[0].color;
+    ctx.beginPath();
+    ctx.moveTo(markerX, markerY - 4);
+    ctx.lineTo(markerX + 4, markerY + 3);
+    ctx.lineTo(markerX - 4, markerY + 3);
+    ctx.closePath();
+    ctx.fill();
+    if (camera.zoom > 0.5) {
+      ctx.fillStyle = "#aab4d6";
+      ctx.font = "9px sans-serif";
+      ctx.fillText(String(totalShips), markerX + 6, markerY + 3);
+    }
+  }
 }
 
 export function pickSystemAt(canvas, galaxy, camera, screenX, screenY) {
