@@ -13,6 +13,7 @@
       <div id="topbar-info"></div>
       <div id="topbar-stats"></div>
       <div id="topbar-actions">
+        <button id="btn-research">Forschung</button>
         <button id="btn-end-turn">Runde beenden</button>
         <button id="btn-new-game">Neue Galaxie</button>
         <button id="btn-save">Speichern</button>
@@ -56,12 +57,37 @@
           </select>
         </label>
         <label>
+          Schwierigkeitsgrad
+          <select id="ng-difficulty">
+            <option value="simple">Einfach</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Schwer</option>
+            <option value="impossible">Unmöglich</option>
+          </select>
+        </label>
+        <label>
           Seed (optional, für reproduzierbare Galaxien)
           <input id="ng-seed" type="text" placeholder="leer = zufällig" />
         </label>
         <div class="dialog-actions">
           <button id="ng-cancel">Abbrechen</button>
           <button id="ng-confirm">Galaxie generieren</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="research-dialog" class="dialog-overlay" hidden>
+      <div class="dialog dialog-wide">
+        <h2>Forschung</h2>
+        <p class="dialog-hint">
+          Die Zuteilungs-Regler bestimmen, wie die über den Forschungs-Slider
+          jedes Planeten erzeugten Punkte auf die sechs Disziplinen verteilt
+          werden. Ab Erreichen der Basiskosten steigt die Durchbruchchance pro
+          Runde mit jeder zusätzlichen Investition.
+        </p>
+        <div id="research-disciplines"></div>
+        <div class="dialog-actions">
+          <button id="research-close">Schließen</button>
         </div>
       </div>
     </div>

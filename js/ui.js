@@ -4,6 +4,9 @@ import { getPlanetSize } from "./data/planetSizes.js";
 import { getStarType } from "./data/starTypes.js";
 import { getRace } from "./data/races.js";
 import { computePlanetProduction, isColonizable, maxPopulation } from "./economy.js";
+import { DISCIPLINES } from "./data/disciplines.js";
+import { getTech } from "./data/techTree.js";
+import { costForTech } from "./research.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -16,8 +19,8 @@ function buildOwnedPlanetCard(system, planet, empire, callbacks) {
   const size = getPlanetSize(planet.size);
   const richness = getRichness(planet.richness);
   const race = getRace(empire?.raceId);
-  const prod = planet.lastProduction ?? computePlanetProduction(planet);
-  const maxPop = maxPopulation(planet);
+  const prod = planet.lastProduction ?? computePlanetProduction(planet, empire);
+  const maxPop = maxPopulation(planet, empire);
 
   const li = document.createElement("li");
 
@@ -181,10 +184,90 @@ export function updateTopbarInfo(galaxy) {
   const statsEl = document.getElementById("topbar-stats");
   if (player) {
     const race = getRace(player.raceId);
-    statsEl.textContent = `${race?.name ?? "Spieler"} · Kolonieschiffe: ${player.colonyShips} · Forschung: ${fmt(player.researchPoints, 0)} RP`;
+    const techLevelSum = DISCIPLINES.reduce((s, d) => s + (player.research?.techLevel[d.id] ?? 0), 0);
+    statsEl.textContent = `${race?.name ?? "Spieler"} · Kolonieschiffe: ${player.colonyShips} · Forschung: ${fmt(player.lastResearchIncome ?? 0, 1)} RP/Runde · Techstufen gesamt: ${techLevelSum}`;
   } else {
     statsEl.textContent = "";
   }
+}
+
+function buildDisciplineCard(discipline, empire, onAllocationChange) {
+  const research = empire.research;
+  const level = research.techLevel[discipline.id];
+  const targetId = research.currentTarget[discipline.id];
+  const target = targetId ? getTech(targetId) : null;
+  const progress = research.progress[discipline.id] ?? 0;
+  const allocation = research.allocation[discipline.id] ?? 0;
+
+  const card = document.createElement("div");
+  card.className = "discipline-card";
+
+  const header = document.createElement("div");
+  header.className = "discipline-header";
+  header.innerHTML = `<span>${discipline.name}</span><span>Stufe ${level}</span>`;
+  card.appendChild(header);
+
+  const targetLine = document.createElement("div");
+  targetLine.className = "discipline-target";
+  if (target) {
+    const cost = costForTech(target, empire.researchCostFactor ?? 26);
+    targetLine.textContent = `Ziel: ${target.name} (Stufe ${target.level}) – ${target.description}`;
+
+    const track = document.createElement("div");
+    track.className = "discipline-progress-track";
+    const fill = document.createElement("div");
+    fill.className = "discipline-progress-fill";
+    fill.style.width = `${Math.min(100, (progress / cost) * 100)}%`;
+    track.appendChild(fill);
+
+    card.appendChild(targetLine);
+    card.appendChild(track);
+
+    const costLine = document.createElement("div");
+    costLine.className = "discipline-target";
+    costLine.textContent = `${fmt(progress, 0)} / ${fmt(cost, 0)} RP`;
+    card.appendChild(costLine);
+  } else {
+    targetLine.textContent = "Keine weiteren Technologien in dieser Disziplin verfügbar (Zufallsauswahl dieser Partie).";
+    card.appendChild(targetLine);
+  }
+
+  const row = document.createElement("div");
+  row.className = "slider-row";
+  const label = document.createElement("span");
+  label.textContent = "Fokus";
+  row.appendChild(label);
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = "0";
+  input.max = "100";
+  input.value = String(Math.round(allocation));
+  input.addEventListener("input", () => onAllocationChange(discipline.id, Number(input.value)));
+  row.appendChild(input);
+  const value = document.createElement("span");
+  value.textContent = `${Math.round(allocation)}%`;
+  row.appendChild(value);
+  card.appendChild(row);
+
+  return card;
+}
+
+export function renderResearchDialog(galaxy, onAllocationChange) {
+  const container = document.getElementById("research-disciplines");
+  container.innerHTML = "";
+  const player = galaxy.empires.find((e) => e.isPlayer);
+  if (!player) return;
+  for (const discipline of DISCIPLINES) {
+    container.appendChild(buildDisciplineCard(discipline, player, onAllocationChange));
+  }
+}
+
+export function openResearchDialog() {
+  document.getElementById("research-dialog").hidden = false;
+}
+
+export function closeResearchDialog() {
+  document.getElementById("research-dialog").hidden = true;
 }
 
 export function openNewGameDialog() {
@@ -199,6 +282,7 @@ export function readNewGameForm() {
   return {
     sizeId: document.getElementById("ng-size").value,
     empireCount: Number(document.getElementById("ng-empires").value),
+    difficultyId: document.getElementById("ng-difficulty").value,
     seed: document.getElementById("ng-seed").value.trim(),
   };
 }

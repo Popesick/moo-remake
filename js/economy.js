@@ -1,6 +1,8 @@
 import { getEnvironment } from "./data/environments.js";
 import { getRichness } from "./data/richness.js";
 import { getPlanetSize } from "./data/planetSizes.js";
+import { getDifficulty } from "./data/difficulty.js";
+import { initEmpireResearch, processResearchTurn } from "./research.js";
 import {
   BASE_BC_PER_POP,
   BASE_BC_PER_FACTORY,
@@ -16,10 +18,13 @@ import {
   DEFAULT_SLIDERS,
 } from "./data/economy.js";
 
-export function maxPopulation(planet) {
+export function maxPopulation(planet, empire) {
   const size = getPlanetSize(planet.size);
   const env = getEnvironment(planet.environment);
-  return Math.max(1, Math.round((size.basePopCapacity * env.habitability) / 100));
+  const base = (size.basePopCapacity * env.habitability) / 100;
+  const withMultiplier = base * (empire?.popCapacityMultiplier ?? 1);
+  const withBonus = withMultiplier + (empire?.popCapacityFlatBonus ?? 0);
+  return Math.max(1, Math.round(withBonus));
 }
 
 export function isColonizable(planet, empire) {
@@ -29,28 +34,31 @@ export function isColonizable(planet, empire) {
   return env.techReq <= techLevel;
 }
 
-export function initEmpireEconomy(empire) {
-  return {
+export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
+  const difficulty = getDifficulty(difficultyId);
+  const base = {
     ...empire,
     colonyShips: 1,
     shipProgress: 0,
     defenseBudget: 0,
-    researchPoints: 0,
-    planetologyTechLevel: 0, // wird ab v0.3 durch den Techbaum erhöht
+    planetologyTechLevel: 0,
+    roboticControlsLevel: ROBOTIC_CONTROLS_BASE,
+    factoryCostMultiplier: 1,
+    ecoCleanupCostMultiplier: 1,
+    popCapacityMultiplier: 1,
+    popCapacityFlatBonus: 0,
+    researchCostFactor: difficulty.researchCostFactor,
+    lastResearchIncome: 0,
   };
+  base.research = initEmpireResearch(seed, empire.id);
+  return base;
 }
 
-export function initColony(planet, { isHomeworld = false } = {}) {
-  planet.population = isHomeworld ? HOMEWORLD_START_POPULATION : START_COLONY_POPULATION;
-  planet.factories = isHomeworld ? HOMEWORLD_START_FACTORIES : 0;
-  planet.sliders = { ...DEFAULT_SLIDERS };
-  planet.indCarry = 0;
-}
-
-export function computePlanetProduction(planet) {
+export function computePlanetProduction(planet, empire) {
   const richness = getRichness(planet.richness);
-  const maxPop = maxPopulation(planet);
-  const activeFactories = Math.min(planet.factories, Math.floor(planet.population * ROBOTIC_CONTROLS_BASE));
+  const maxPop = maxPopulation(planet, empire);
+  const roboticControls = empire?.roboticControlsLevel ?? ROBOTIC_CONTROLS_BASE;
+  const activeFactories = Math.min(planet.factories, Math.floor(planet.population * roboticControls));
 
   const baseBC = planet.population * BASE_BC_PER_POP;
   const factoryBC = activeFactories * BASE_BC_PER_FACTORY * richness.multiplier;
@@ -65,30 +73,46 @@ export function computePlanetProduction(planet) {
     tech: (totalBC * s.tech) / 100,
   };
 
+  const factoryCostMultiplier = empire?.factoryCostMultiplier ?? 1;
+  const ecoCleanupCostMultiplier = empire?.ecoCleanupCostMultiplier ?? 1;
+
   const wasteGenerated = activeFactories * WASTE_PER_FACTORY;
-  const wasteCleanable = bc.eco / ECO_CLEANUP_BC_PER_WASTE;
+  const cleanupCostPerWaste = ECO_CLEANUP_BC_PER_WASTE * ecoCleanupCostMultiplier;
+  const wasteCleanable = cleanupCostPerWaste > 0 ? bc.eco / cleanupCostPerWaste : wasteGenerated;
   const wasteRemaining = Math.max(0, wasteGenerated - wasteCleanable);
   const pollutionPenalty = wasteGenerated > 0 ? Math.min(0.5, wasteRemaining / wasteGenerated) : 0;
 
-  return { totalBC, bc, activeFactories, maxPop, wasteGenerated, wasteRemaining, pollutionPenalty };
+  return {
+    totalBC,
+    bc,
+    activeFactories,
+    maxPop,
+    wasteGenerated,
+    wasteRemaining,
+    pollutionPenalty,
+    factoryCostBC: FACTORY_COST_BC * factoryCostMultiplier,
+    roboticControls,
+  };
 }
 
 // Simuliert eine Runde für die gesamte Galaxie: Produktion, Fabrikbau,
 // Verschmutzung, Bevölkerungswachstum, Kolonieschiff-Ansparung, Forschung.
 export function simulateTurn(galaxy) {
-  const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { researchPoints: 0, shipBC: 0, defBC: 0 }]));
+  const empireById = new Map(galaxy.empires.map((e) => [e.id, e]));
+  const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, shipBC: 0, defBC: 0 }]));
 
   for (const system of galaxy.systems) {
     for (const planet of system.planets) {
       if (planet.colonizedBy === null || planet.colonizedBy === undefined) continue;
+      const empire = empireById.get(planet.colonizedBy);
 
-      const prod = computePlanetProduction(planet);
+      const prod = computePlanetProduction(planet, empire);
 
       // Industrie: neue Fabriken bauen, Rest in nächste Runde übertragen
       const indFund = prod.bc.ind + (planet.indCarry ?? 0);
-      const newFactories = Math.floor(indFund / FACTORY_COST_BC);
-      planet.indCarry = indFund - newFactories * FACTORY_COST_BC;
-      const factoryCap = Math.ceil(prod.maxPop * ROBOTIC_CONTROLS_BASE * 1.5);
+      const newFactories = Math.floor(indFund / prod.factoryCostBC);
+      planet.indCarry = indFund - newFactories * prod.factoryCostBC;
+      const factoryCap = Math.ceil(prod.maxPop * prod.roboticControls * 1.5);
       planet.factories = Math.min(factoryCap, planet.factories + newFactories);
 
       // Bevölkerungswachstum: Glockenkurve mit Scheitel bei 50% Kapazität,
@@ -101,18 +125,21 @@ export function simulateTurn(galaxy) {
 
       const delta = empireDeltas.get(planet.colonizedBy);
       if (delta) {
-        delta.researchPoints += prod.bc.tech;
+        delta.techBC += prod.bc.tech;
         delta.shipBC += prod.bc.ship;
         delta.defBC += prod.bc.def;
       }
     }
   }
 
+  const turn = galaxy.turn ?? 1;
+  const breakthroughsByEmpire = new Map();
+
   for (const empire of galaxy.empires) {
     const delta = empireDeltas.get(empire.id);
     if (!delta) continue;
-    empire.researchPoints += delta.researchPoints;
     empire.defenseBudget += delta.defBC;
+    empire.lastResearchIncome = delta.techBC;
 
     empire.shipProgress += delta.shipBC;
     const newShips = Math.floor(empire.shipProgress / COLONY_SHIP_COST_BC);
@@ -120,9 +147,13 @@ export function simulateTurn(galaxy) {
       empire.colonyShips += newShips;
       empire.shipProgress -= newShips * COLONY_SHIP_COST_BC;
     }
+
+    const breakthroughs = processResearchTurn(empire, delta.techBC, galaxy.seed, turn);
+    if (breakthroughs.length > 0) breakthroughsByEmpire.set(empire.id, breakthroughs);
   }
 
-  galaxy.turn = (galaxy.turn ?? 1) + 1;
+  galaxy.turn = turn + 1;
+  return { breakthroughsByEmpire };
 }
 
 export function colonizePlanet(galaxy, systemId, planetId, empireId) {
@@ -141,4 +172,11 @@ export function colonizePlanet(galaxy, systemId, planetId, empireId) {
   planet.colonizedBy = empireId;
   initColony(planet, { isHomeworld: false });
   return { ok: true };
+}
+
+export function initColony(planet, { isHomeworld = false } = {}) {
+  planet.population = isHomeworld ? HOMEWORLD_START_POPULATION : START_COLONY_POPULATION;
+  planet.factories = isHomeworld ? HOMEWORLD_START_FACTORIES : 0;
+  planet.sliders = { ...DEFAULT_SLIDERS };
+  planet.indCarry = 0;
 }

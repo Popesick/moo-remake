@@ -83,7 +83,7 @@ function generateSystem(rng, id, bounds) {
   };
 }
 
-export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed } = {}) {
+export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, difficultyId = "normal" } = {}) {
   const sizeCfg = GALAXY_SIZES[sizeId] ?? GALAXY_SIZES.medium;
   const numericSeed = seed === undefined || seed === null || seed === ""
     ? randomSeed()
@@ -123,12 +123,13 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed } = {}
     return system;
   });
 
-  const empires = generateEmpires(rng, empireCount);
+  const empires = generateEmpires(rng, empireCount, numericSeed, difficultyId);
   assignHomeworlds(rng, systems, empires);
 
   return {
     seed: numericSeed,
     sizeId,
+    difficultyId,
     width: sizeCfg.width,
     height: sizeCfg.height,
     empireCount,
@@ -142,7 +143,7 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed } = {}
 // Empire 0 ist immer der Spieler und spielt die Menschen; die KI-Imperien
 // (aktiv erst ab v0.6) erhalten eine zufällige Auswahl der übrigen
 // Fraktionen ohne Wiederholung.
-function generateEmpires(rng, empireCount) {
+function generateEmpires(rng, empireCount, seed, difficultyId) {
   const aiRaces = RACES.filter((r) => r.id !== "human");
   for (let i = aiRaces.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
@@ -153,13 +154,17 @@ function generateEmpires(rng, empireCount) {
   for (let e = 0; e < empireCount; e++) {
     const race = e === 0 ? RACES[0] : aiRaces[(e - 1) % aiRaces.length];
     empires.push(
-      initEmpireEconomy({
-        id: e,
-        name: race.name,
-        raceId: race.id,
-        color: race.color,
-        isPlayer: e === 0,
-      })
+      initEmpireEconomy(
+        {
+          id: e,
+          name: race.name,
+          raceId: race.id,
+          color: race.color,
+          isPlayer: e === 0,
+        },
+        seed,
+        difficultyId
+      )
     );
   }
   return empires;

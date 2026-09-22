@@ -3,15 +3,27 @@ import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
 import { render, pickSystemAt, fitGalaxyToView } from "./render.js";
 import { simulateTurn, colonizePlanet, computePlanetProduction } from "./economy.js";
 import { normalizeSliders } from "./data/economy.js";
+import { normalizeAllocation } from "./research.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
   openNewGameDialog,
   closeNewGameDialog,
   readNewGameForm,
+  openResearchDialog,
+  closeResearchDialog,
+  renderResearchDialog,
 } from "./ui.js";
 
 const canvas = document.getElementById("galaxy-canvas");
+
+function getEmpire(id) {
+  return gameState.galaxy.empires.find((e) => e.id === id);
+}
+
+function getPlayerEmpire() {
+  return gameState.galaxy.empires.find((e) => e.isPlayer);
+}
 
 const panelCallbacks = {
   onSliderChange(systemId, planetId, key, value) {
@@ -20,7 +32,7 @@ const panelCallbacks = {
     if (!planet) return;
     planet.sliders[key] = value;
     planet.sliders = normalizeSliders(planet.sliders);
-    planet.lastProduction = computePlanetProduction(planet);
+    planet.lastProduction = computePlanetProduction(planet, getEmpire(planet.colonizedBy));
     refreshSidePanel();
   },
   onColonize(systemId, planetId) {
@@ -52,8 +64,8 @@ function selectSystem(system) {
   requestRender();
 }
 
-function startNewGalaxy({ sizeId, empireCount, seed }) {
-  const galaxy = generateGalaxy({ sizeId, empireCount, seed: seed || undefined });
+function startNewGalaxy({ sizeId, empireCount, difficultyId, seed }) {
+  const galaxy = generateGalaxy({ sizeId, empireCount, difficultyId, seed: seed || undefined });
   gameState.galaxy = galaxy;
   gameState.selectedSystemId = null;
   gameState.camera = fitGalaxyToView(canvas, galaxy);
@@ -63,13 +75,25 @@ function startNewGalaxy({ sizeId, empireCount, seed }) {
   saveGame();
 }
 
+function onResearchAllocationChange(disciplineId, value) {
+  const player = getPlayerEmpire();
+  player.research.allocation[disciplineId] = value;
+  player.research.allocation = normalizeAllocation(player.research.allocation);
+  renderResearchDialog(gameState.galaxy, onResearchAllocationChange);
+}
+
 function endTurn() {
   if (!gameState.galaxy) return;
-  simulateTurn(gameState.galaxy);
+  const { breakthroughsByEmpire } = simulateTurn(gameState.galaxy);
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
   requestRender();
   saveGame();
+
+  const playerBreakthroughs = breakthroughsByEmpire.get(getPlayerEmpire().id);
+  if (playerBreakthroughs?.length) {
+    flashTopbar(`Durchbruch: ${playerBreakthroughs.map((t) => t.name).join(", ")}`);
+  }
 }
 
 function setupCanvasInteractions() {
@@ -145,6 +169,13 @@ function setupDialogAndButtons() {
   });
 
   document.getElementById("btn-end-turn").addEventListener("click", endTurn);
+
+  document.getElementById("btn-research").addEventListener("click", () => {
+    if (!gameState.galaxy) return;
+    renderResearchDialog(gameState.galaxy, onResearchAllocationChange);
+    openResearchDialog();
+  });
+  document.getElementById("research-close").addEventListener("click", closeResearchDialog);
 
   document.getElementById("btn-save").addEventListener("click", () => {
     const ok = saveGame();
