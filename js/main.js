@@ -6,7 +6,8 @@ import { normalizeSliders } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
 import { sendFleet, splitStack } from "./fleets.js";
-import { getRelation, setRelationStatus } from "./diplomacy.js";
+import { getRelation, setRelationStatus, isAtWar } from "./diplomacy.js";
+import { resolveInvasion, applyInvasionResult, applyBioAttack, maxInvasionTroops } from "./invasion.js";
 import { getPersonality } from "./data/aiPersonality.js";
 import {
   renderSystemPanel,
@@ -82,6 +83,57 @@ const panelCallbacks = {
   onArmFleetMove(fleetId) {
     gameState.pendingFleetMove = fleetId;
     flashTopbar("Zielsystem auf der Karte anklicken …");
+  },
+  onInvade(systemId, planetId, troopsRequested) {
+    const galaxy = gameState.galaxy;
+    const system = findSystem(galaxy, systemId);
+    const planet = system?.planets.find((p) => p.id === planetId);
+    const attacker = getPlayerEmpire();
+    const defender = getEmpire(planet?.colonizedBy);
+    if (!planet || !defender || !isAtWar(galaxy, attacker.id, defender.id)) return;
+
+    // Truppen entstammen dem bevölkerungsreichsten eigenen Planeten (siehe
+    // design-analyse.docx: 1 Soldat = 1 entvölkerter Bürger des Quellplaneten).
+    const ownedPlanets = galaxy.systems
+      .flatMap((s) => s.planets)
+      .filter((p) => p.colonizedBy === attacker.id)
+      .sort((a, b) => b.population - a.population);
+    const source = ownedPlanets[0];
+    if (!source) {
+      flashTopbar("Kein eigener Planet zur Truppenaushebung verfügbar.");
+      return;
+    }
+    const troops = Math.max(1, Math.min(troopsRequested, maxInvasionTroops(attacker, source)));
+    source.population -= troops;
+
+    const result = resolveInvasion(attacker, defender, planet, troops);
+    applyInvasionResult(galaxy, attacker.id, planet, result);
+
+    updateTopbarInfo(galaxy);
+    refreshSidePanel();
+    requestRender();
+    saveGame();
+    flashTopbar(result.log[0]);
+  },
+  onBioAttack(systemId, planetId) {
+    const galaxy = gameState.galaxy;
+    const system = findSystem(galaxy, systemId);
+    const planet = system?.planets.find((p) => p.id === planetId);
+    const attacker = getPlayerEmpire();
+    const defender = getEmpire(planet?.colonizedBy);
+    if (!planet || !defender || !isAtWar(galaxy, attacker.id, defender.id)) return;
+    if (!window.confirm(`Bioangriff auf ${system.name} ${planet.name} einsetzen? Dies tötet Zivilisten und verschlechtert die Beziehungen zu allen anderen Imperien drastisch.`)) {
+      return;
+    }
+
+    const result = applyBioAttack(galaxy, attacker, defender, planet);
+    updateTopbarInfo(galaxy);
+    refreshSidePanel();
+    requestRender();
+    saveGame();
+    flashTopbar(
+      `Bioangriff: ${result.casualties.toFixed(1)} Mio. Opfer${result.depopulated ? ", Planet entvölkert" : ""}${result.newWars > 0 ? ` · ${result.newWars} neue Kriegserklärung(en)` : ""}.`
+    );
   },
 };
 

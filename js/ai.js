@@ -6,6 +6,7 @@ import { addShipDesign } from "./shipDesign.js";
 import { modulesOfKind } from "./shipDesign.js";
 import { findFleetsAt, sendFleet } from "./fleets.js";
 import { isAtWar, setRelationStatus } from "./diplomacy.js";
+import { resolveInvasion, applyInvasionResult, maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
 import { makeRng, hashSeed } from "./rng.js";
 
 const WAR_CHECK_SCALE = 0.04; // dämpft warBias auf eine plausible Pro-Runde-Wahrscheinlichkeit
@@ -104,12 +105,49 @@ function attemptAggression(galaxy, empire) {
   sendFleet(galaxy, strongFleet.id, targetHome.id, empire.travelSpeedParsec);
 }
 
+// Invadiert automatisch jeden Planeten eines Kriegsgegners, an dessen
+// System eine eigene, unkontestierte Flotte steht (siehe ROADMAP v0.7).
+function attemptInvasion(galaxy, empire) {
+  const stationary = galaxy.fleets.filter((f) => f.ownerEmpireId === empire.id && !f.destinationSystemId);
+  if (stationary.length === 0) return;
+
+  for (const fleet of stationary) {
+    const system = galaxy.systems.find((s) => s.id === fleet.systemId);
+    if (!system) continue;
+    const enemyFleetsHere = galaxy.fleets.some(
+      (f) => f.systemId === system.id && f.ownerEmpireId !== empire.id && !f.destinationSystemId && isAtWar(galaxy, empire.id, f.ownerEmpireId)
+    );
+    if (enemyFleetsHere) continue;
+
+    const target = system.planets.find(
+      (p) => p.colonizedBy !== null && p.colonizedBy !== undefined && p.colonizedBy !== empire.id && isAtWar(galaxy, empire.id, p.colonizedBy)
+    );
+    if (!target) continue;
+
+    const defender = galaxy.empires.find((e) => e.id === target.colonizedBy);
+    const ownedPlanets = galaxy.systems
+      .flatMap((s) => s.planets)
+      .filter((p) => p.colonizedBy === empire.id)
+      .sort((a, b) => b.population - a.population);
+    const source = ownedPlanets[0];
+    if (!source) continue;
+
+    const troops = Math.min(fleetTroopCapacity(fleet), maxInvasionTroops(empire, source));
+    if (troops < 1) continue;
+
+    source.population -= troops;
+    const result = resolveInvasion(empire, defender, target, troops);
+    applyInvasionResult(galaxy, empire.id, target, result);
+  }
+}
+
 // Führt die KI-Runde für ein einzelnes, nicht spielergesteuertes Imperium
-// aus: Wirtschaftspolitik gemäß Ziel, Kolonisierung, Diplomatie-Neigung und
-// (bei kriegerischer Persönlichkeit) gelegentliche Flottenangriffe.
+// aus: Wirtschaftspolitik gemäß Ziel, Kolonisierung, Diplomatie-Neigung,
+// (bei kriegerischer Persönlichkeit) Flottenangriffe und Invasionen.
 export function runAiTurn(galaxy, empire, seed, turn) {
   applyEconomyPolicy(galaxy, empire);
   attemptColonization(galaxy, empire);
   considerDiplomacy(galaxy, empire, seed, turn);
   attemptAggression(galaxy, empire);
+  attemptInvasion(galaxy, empire);
 }

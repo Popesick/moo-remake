@@ -173,6 +173,18 @@ export function applyTechEffect(empire, tech) {
     case "ecmBonus":
       empire.ecmDefense = Math.max(empire.ecmDefense ?? 0, effect.value);
       break;
+    case "groundArmorBonus":
+      empire.groundArmorBonus = Math.max(empire.groundArmorBonus ?? 0, effect.value);
+      break;
+    case "groundShieldBonus":
+      empire.groundShieldBonus = Math.max(empire.groundShieldBonus ?? 0, effect.value);
+      break;
+    case "bioWeapon":
+      empire.bioWeaponKillMillions = Math.max(empire.bioWeaponKillMillions ?? 0, effect.value);
+      break;
+    case "bioAntidote":
+      empire.bioAntidoteReduceMillions = Math.max(empire.bioAntidoteReduceMillions ?? 0, effect.value);
+      break;
     case "flavor":
     default:
       break; // wartet auf Schiffsdesign/Kampf/Bodeninvasion (v0.4/v0.5/v0.7)

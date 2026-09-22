@@ -64,6 +64,11 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     shipDesigns: [],
     attackBonus: traits.attackBonus ?? 0,
     ecmDefense: 0,
+    groundArmorBonus: 0,
+    groundShieldBonus: 0,
+    bioWeaponKillMillions: 0,
+    bioAntidoteReduceMillions: 0,
+    groundCombatMultiplier: 1 + (traits.groundCombatBonus ?? 0) / 100, // Bulrathi: +20% Bodenkampfeffektivität
     maneuverBonus: traits.maneuverBonus ?? 0,
     productionMultiplier: 1 + (traits.productionBonusPct ?? 0) / 100,
     popProductionMultiplier: traits.popProductionMultiplier ?? 1,

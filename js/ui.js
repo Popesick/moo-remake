@@ -8,6 +8,8 @@ import { DISCIPLINES } from "./data/disciplines.js";
 import { getTech } from "./data/techTree.js";
 import { costForTech, getCandidateTechs } from "./research.js";
 import { getResearchCostFactor } from "./data/raceResearch.js";
+import { isAtWar } from "./diplomacy.js";
+import { maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -152,6 +154,85 @@ function buildOwnedPlanetCard(system, planet, empire, callbacks) {
   return li;
 }
 
+function buildEnemyPlanetCard(system, planet, empire, playerEmpire, galaxy, callbacks) {
+  const env = getEnvironment(planet.environment);
+  const size = getPlanetSize(planet.size);
+  const richness = getRichness(planet.richness);
+  const race = getRace(empire?.raceId);
+
+  const li = document.createElement("li");
+
+  const head = document.createElement("div");
+  head.className = "planet-card-head";
+  const icon = document.createElement("img");
+  icon.className = "planet-icon";
+  icon.src = envIconPath(env.id);
+  icon.alt = env.name;
+  head.appendChild(icon);
+  const headText = document.createElement("div");
+  const name = document.createElement("div");
+  name.className = "planet-name";
+  name.textContent = `${system.name} ${planet.name}${planet.isHomeworld ? " (Heimatwelt)" : ""}`;
+  headText.appendChild(name);
+  const owner = document.createElement("div");
+  owner.className = "planet-owner";
+  owner.innerHTML = `<span class="owner-dot" style="background:${race?.color ?? "#888"}"></span>${race?.name ?? "Unbekannt"}`;
+  headText.appendChild(owner);
+  head.appendChild(headText);
+  li.appendChild(head);
+
+  const meta = document.createElement("div");
+  meta.className = "planet-meta";
+  meta.textContent = `${env.name} · ${size.name} · ${richness.name}`;
+  li.appendChild(meta);
+
+  const popLine = document.createElement("div");
+  popLine.className = "production-line";
+  popLine.textContent = `Bevölkerung: ${fmt(planet.population)} Mio. · Fabriken: ${planet.factories}`;
+  li.appendChild(popLine);
+
+  if (!playerEmpire || !isAtWar(galaxy, playerEmpire.id, empire.id)) return li;
+
+  const playerFleetsHere = galaxy.fleets.filter(
+    (f) => f.systemId === system.id && f.ownerEmpireId === playerEmpire.id && !f.destinationSystemId
+  );
+  const enemyFleetsHere = galaxy.fleets.filter(
+    (f) => f.systemId === system.id && f.ownerEmpireId === empire.id && !f.destinationSystemId
+  );
+  const capacity = playerFleetsHere.reduce((sum, f) => sum + fleetTroopCapacity(f), 0);
+
+  if (playerFleetsHere.length > 0 && enemyFleetsHere.length === 0 && capacity > 0) {
+    const invasionRow = document.createElement("div");
+    invasionRow.className = "fleet-actions";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(capacity);
+    input.value = String(Math.min(capacity, 10));
+    const btn = document.createElement("button");
+    btn.textContent = `Invasion (max. ${capacity} Mio. Transportkapazität)`;
+    btn.addEventListener("click", () => callbacks.onInvade(system.id, planet.id, Number(input.value)));
+    invasionRow.appendChild(input);
+    invasionRow.appendChild(btn);
+    li.appendChild(invasionRow);
+  } else if (enemyFleetsHere.length > 0) {
+    const hint = document.createElement("div");
+    hint.className = "colonize-hint";
+    hint.textContent = "Orbit ist noch von feindlichen Flotten kontrolliert – keine Invasion möglich.";
+    li.appendChild(hint);
+  }
+
+  if ((playerEmpire.bioWeaponKillMillions ?? 0) > 0) {
+    const bioBtn = document.createElement("button");
+    bioBtn.className = "btn-colonize";
+    bioBtn.textContent = "Bioangriff einsetzen";
+    bioBtn.addEventListener("click", () => callbacks.onBioAttack(system.id, planet.id));
+    li.appendChild(bioBtn);
+  }
+
+  return li;
+}
+
 function buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks) {
   const env = getEnvironment(planet.environment);
   const size = getPlanetSize(planet.size);
@@ -233,7 +314,11 @@ export function renderSystemPanel(system, galaxy, callbacks) {
   for (const planet of system.planets) {
     if (planet.colonizedBy !== null && planet.colonizedBy !== undefined) {
       const empire = galaxy.empires.find((e) => e.id === planet.colonizedBy);
-      list.appendChild(buildOwnedPlanetCard(system, planet, empire, callbacks));
+      if (empire?.id === playerEmpire?.id) {
+        list.appendChild(buildOwnedPlanetCard(system, planet, empire, callbacks));
+      } else {
+        list.appendChild(buildEnemyPlanetCard(system, planet, empire, playerEmpire, galaxy, callbacks));
+      }
     } else {
       list.appendChild(buildUncolonizedPlanetCard(system, planet, playerEmpire, callbacks));
     }

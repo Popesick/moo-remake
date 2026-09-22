@@ -63,9 +63,23 @@ hochzuhalten und Node/npm-Abhängigkeiten zu vermeiden.
 KI-Gegner mit eigener Wirtschafts-, Forschungs- und Diplomatiepolitik,
 spielbar von der Kolonisierung bis zum Sieg.
 
-## Nach dem Prototyp (spätere Releases)
+## Nach dem Prototyp
 
-- v0.7 Bodeninvasion (Infanterie-Formel, Eroberung/Tech-Diebstahl)
+- **v0.7 – Bodeninvasion**
+  Infanterie-Formel aus `design-analyse.docx` (Panzerungs-/Waffen-Techstufe,
+  Exoskelett-/Powered-Armor- und Personal-Shield-Ketten als Ground-Boni,
+  Bulrathi-Rassenbonus), automatische Invasionsauflösung mit Tech-Diebstahl
+  bei Erfolg, Fabriken bleiben beim Eroberer erhalten. Biowaffen (Death
+  Spores/Doom Virus/Bio Terminator, Antidote bereits aus v0.3) töten
+  Bevölkerung direkt statt Infrastruktur, mit diplomatischem Fallout
+  (Kriegs-Chance bei allen anderen Imperien). KI führt Invasionen bei
+  gesicherter Umlaufbahn automatisch durch. *Vereinfacht:* keine dedizierten
+  Transporter-Schiffe (Transportkapazität = Flottengröße × 5), Truppen
+  entstammen automatisch dem bevölkerungsreichsten eigenen Planeten statt
+  einer frei wählbaren Quelle, KI setzt keine Biowaffen ein.
+
+## Weitere Post-Prototyp-Releases
+
 - v0.8 Spionage & Framing
 - v0.9 Galaktischer Rat, Handelsabkommen/Verträge & Diplomatie-Sieg
 - v0.10 Orion-System & Guardian, Miniaturisierungs-Inhalte, galaktische Zufallsereignisse
