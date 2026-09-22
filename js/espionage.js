@@ -1,5 +1,6 @@
 import { getTech } from "./data/techTree.js";
 import { isAtWar, setRelationStatus } from "./diplomacy.js";
+import { PERSONALITIES, OBJECTIVES } from "./data/aiPersonality.js";
 import {
   SPY_ACTIONS,
   MISSION_BASE_SUCCESS_CHANCE,
@@ -7,6 +8,7 @@ import {
   DARLOK_DETECTION_REDUCTION,
   DARLOK_FRAME_SUCCESS_CHANCE,
   DEFAULT_FRAME_SUCCESS_CHANCE,
+  REBELLION_PERSONALITY_CHANGE_CHANCE,
 } from "./data/espionage.js";
 
 function stealTech(attacker, defender, log) {
@@ -28,12 +30,26 @@ function sabotage(defender, targetPlanet, log) {
   log.push(`Sabotage: ${lost} Fabrik(en) auf ${targetPlanet.name} zerstört.`);
 }
 
+// Rebellion (design-analyse.docx / "MoO KI Verhalten.docx", ROADMAP v0.12):
+// kann bei KI-Opfern zusätzlich den Herrscher stürzen und damit
+// Persönlichkeit und strategisches Ziel des Imperiums neu auswürfeln – der
+// Spieler kann so gezielt versuchen, einen feindlichen Machthaber zu
+// manipulieren. Beim menschlichen Spieler bleibt die Ausrichtung
+// unverändert (kein Persönlichkeits-System für den Spieler selbst).
 function incitRebellion(defender, targetPlanet, log) {
   const factoryLoss = Math.ceil(targetPlanet.factories * 0.3);
   const popLoss = targetPlanet.population * 0.15;
   targetPlanet.factories = Math.max(0, targetPlanet.factories - factoryLoss);
   targetPlanet.population = Math.max(0.1, targetPlanet.population - popLoss);
   log.push(`Rebellion: ${factoryLoss} Fabrik(en) zerstört, ${popLoss.toFixed(1)} Mio. Bevölkerung durch Unruhen verloren.`);
+
+  if (!defender.isPlayer && Math.random() < REBELLION_PERSONALITY_CHANGE_CHANCE) {
+    const newPersonality = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
+    const newObjective = OBJECTIVES[Math.floor(Math.random() * OBJECTIVES.length)];
+    defender.personalityId = newPersonality.id;
+    defender.objectiveId = newObjective.id;
+    log.push(`Der Herrscher von ${defender.name} wird gestürzt – neue Ausrichtung: ${newPersonality.name} / ${newObjective.name}.`);
+  }
 }
 
 function pickTargetPlanet(galaxy, defenderEmpireId) {

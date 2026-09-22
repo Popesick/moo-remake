@@ -10,6 +10,15 @@ import {
   TRADE_MAX_BC_PER_TURN,
 } from "./data/diplomacyOptions.js";
 
+// Diplomatisches Gedächtnis (ROADMAP v0.12, "MoO KI Verhalten.docx": KI
+// verweigert nach Vertragsbrüchen dauerhaft neue Allianzen/Handelsabkommen).
+// Ein einzelner, symmetrischer Groll-Wert pro Imperiumspaar statt einer
+// gerichteten Zuordnung – vereinfacht, aber ausreichend, um Friedens- und
+// Handelsangebote nach Kriegserklärungen/gebrochenen Handelsabkommen
+// dauerhaft unwahrscheinlicher zu machen.
+export const WAR_DECLARATION_GRUDGE = 40;
+export const BROKEN_TRADE_GRUDGE = 15;
+
 function pairKey(empireIdA, empireIdB) {
   const [a, b] = [empireIdA, empireIdB].sort((x, y) => x - y);
   return `${a}-${b}`;
@@ -20,22 +29,40 @@ export function initRelations(galaxy) {
   galaxy.tradeAgreements = {};
   for (let i = 0; i < galaxy.empires.length; i++) {
     for (let j = i + 1; j < galaxy.empires.length; j++) {
-      galaxy.relations[pairKey(galaxy.empires[i].id, galaxy.empires[j].id)] = { status: "peace" };
+      galaxy.relations[pairKey(galaxy.empires[i].id, galaxy.empires[j].id)] = { status: "peace", grudge: 0 };
     }
   }
 }
 
 export function getRelation(galaxy, empireIdA, empireIdB) {
-  return galaxy.relations?.[pairKey(empireIdA, empireIdB)] ?? { status: "peace" };
+  return galaxy.relations?.[pairKey(empireIdA, empireIdB)] ?? { status: "peace", grudge: 0 };
 }
 
 export function isAtWar(galaxy, empireIdA, empireIdB) {
   return getRelation(galaxy, empireIdA, empireIdB).status === "war";
 }
 
+export function getGrudge(galaxy, empireIdA, empireIdB) {
+  return getRelation(galaxy, empireIdA, empireIdB).grudge ?? 0;
+}
+
+export function addGrudge(galaxy, empireIdA, empireIdB, amount) {
+  if (!galaxy.relations) galaxy.relations = {};
+  const key = pairKey(empireIdA, empireIdB);
+  const existing = galaxy.relations[key] ?? { status: "peace", grudge: 0 };
+  galaxy.relations[key] = { ...existing, grudge: (existing.grudge ?? 0) + amount };
+}
+
 export function setRelationStatus(galaxy, empireIdA, empireIdB, status) {
   if (!galaxy.relations) galaxy.relations = {};
-  galaxy.relations[pairKey(empireIdA, empireIdB)] = { status };
+  const key = pairKey(empireIdA, empireIdB);
+  const existing = galaxy.relations[key] ?? { status: "peace", grudge: 0 };
+  // Unprovozierte Kriegserklärung (aus vorherigem Frieden) hinterlässt
+  // dauerhaften Groll, der spätere Friedens-/Handelsangebote erschwert.
+  const grudge = status === "war" && existing.status === "peace"
+    ? (existing.grudge ?? 0) + WAR_DECLARATION_GRUDGE
+    : existing.grudge ?? 0;
+  galaxy.relations[key] = { status, grudge };
   // Krieg beendet ein bestehendes Handelsabkommen automatisch.
   if (status === "war") cancelTradeAgreement(galaxy, empireIdA, empireIdB);
 }

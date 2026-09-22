@@ -68,6 +68,25 @@ export function sendFleet(galaxy, fleetId, destinationSystemId) {
   return { ok: true };
 }
 
+// Ruft eine bereits unterwegs befindliche Flotte zurück (ROADMAP v0.12,
+// KI-Verteidigungspriorisierung aus "MoO KI Verhalten.docx": "Im Kriegsfall
+// konzentriert sich die KI immer zuerst auf den Schutz der eigenen
+// Planeten"). *Vereinfacht:* die Flotte springt sofort an ihr
+// Ursprungssystem zurück statt die Restdistanz zum alten Ziel korrekt in
+// eine neue Route umzurechnen – dieses Remake modelliert keine echten
+// Schiffspositionen entlang der Flugbahn, nur einen linearen Fortschritt.
+export function recallFleet(galaxy, fleetId) {
+  const fleet = galaxy.fleets.find((f) => f.id === fleetId);
+  if (!fleet || !fleet.destinationSystemId) return { ok: false, reason: "Flotte ist nicht unterwegs." };
+  fleet.systemId = fleet.originSystemId ?? fleet.systemId;
+  fleet.destinationSystemId = null;
+  fleet.originSystemId = null;
+  fleet.travelRemaining = 0;
+  fleet.travelSpeed = undefined;
+  fleet.travelTotal = undefined;
+  return { ok: true };
+}
+
 // Splittet einen Stack (gleiches Design) in eine neue, stationäre Flotte am
 // selben System ab, um Teilstreitkräfte separat verlegen zu können (siehe
 // design-analyse.docx "Stack-Splitting").

@@ -13,6 +13,9 @@ import {
   isAtWar,
   proposeTradeAgreement,
   cancelTradeAgreement,
+  getGrudge,
+  addGrudge,
+  BROKEN_TRADE_GRUDGE,
 } from "./diplomacy.js";
 import { resolveInvasion, applyInvasionResult, applyBioAttack, maxInvasionTroops } from "./invasion.js";
 import { attemptSpyAction } from "./espionage.js";
@@ -252,7 +255,11 @@ const diplomacyCallbacks = {
     const player = getPlayerEmpire();
     const other = getEmpire(otherEmpireId);
     const personality = getPersonality(other.personalityId);
-    const acceptChance = personality.erratic ? 0.5 : 1 - personality.warBias;
+    const grudge = getGrudge(gameState.galaxy, player.id, otherEmpireId);
+    // Diplomatisches Gedächtnis (ROADMAP v0.12): jeder Groll-Punkt aus
+    // vergangenen Kriegserklärungen/gebrochenen Handelsabkommen senkt die
+    // Friedensbereitschaft der KI zusätzlich zur Persönlichkeit.
+    const acceptChance = (personality.erratic ? 0.5 : 1 - personality.warBias) - grudge * 0.01;
     if (Math.random() < acceptChance) {
       setRelationStatus(gameState.galaxy, player.id, otherEmpireId, "peace");
       flashTopbar(`${other.name} nimmt das Friedensangebot an.`);
@@ -281,7 +288,8 @@ const diplomacyCallbacks = {
   onProposeTrade(otherEmpireId) {
     const player = getPlayerEmpire();
     const other = getEmpire(otherEmpireId);
-    if (aiAcceptsTradeOffer(other)) {
+    const grudge = getGrudge(gameState.galaxy, player.id, otherEmpireId);
+    if (aiAcceptsTradeOffer(other, grudge)) {
       proposeTradeAgreement(gameState.galaxy, player.id, otherEmpireId);
       flashTopbar(`${other.name} nimmt das Handelsabkommen an.`);
     } else {
@@ -293,6 +301,11 @@ const diplomacyCallbacks = {
   onCancelTrade(otherEmpireId) {
     const player = getPlayerEmpire();
     cancelTradeAgreement(gameState.galaxy, player.id, otherEmpireId);
+    // Einseitiges Aufkündigen eines laufenden Handelsabkommens hinterlässt
+    // Groll (diplomatisches Gedächtnis, ROADMAP v0.12) – anders als die
+    // automatische Beendigung durch eine Kriegserklärung, die bereits über
+    // WAR_DECLARATION_GRUDGE abgedeckt ist.
+    addGrudge(gameState.galaxy, player.id, otherEmpireId, BROKEN_TRADE_GRUDGE);
     renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
     saveGame();
   },

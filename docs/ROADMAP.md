@@ -6,7 +6,9 @@ Master of Orion (1993) anlehnt. Grundlage sind die Analysen in
 [`techtree-analyse.docx`](techtree-analyse.docx) (vollständiger Technologiebaum
 mit Kosten-/Durchbruchsformeln, siehe `js/data/techTree.js`) und
 [`shipklassen-analyse.docx`](shipklassen-analyse.docx) (Rumpf-HP/Ausweichboni,
-siehe `js/data/hulls.js`). Umfang für den ersten spielbaren Prototyp:
+siehe `js/data/hulls.js`) und [`ki-verhalten-analyse.docx`](ki-verhalten-analyse.docx)
+(KI-Diplomatie-Gedächtnis, Zielbewertungsformel, Orion-Sperr-Timer,
+Verteidigungspriorisierung, siehe `js/ai.js`, ROADMAP v0.12). Umfang für den ersten spielbaren Prototyp:
 **Standard 4X-Kern** – vollständige Partie gegen KI, gewinnbar durch
 Elimination oder Punktzahl. Diplomatie, Spionage, Bodeninvasion,
 Galaktischer Rat und Orion-Wächter folgen erst nach dem Prototyp in
@@ -204,6 +206,42 @@ spielbar von der Kolonisierung bis zum Sieg.
   Elimination wird stets dem letzten Angreifer zugeschrieben (keine anteilige
   Zuordnung bei mehreren Beteiligten); die Hall of Fame speichert nur das
   jeweilige Siegerimperium, nicht die volle Abschlusstabelle aller Partien.
+
+- **v0.12 – KI-Verhalten-Politur**
+  Umsetzung von `MoO KI Verhalten.docx` (vom Nutzer bereitgestelltes
+  Anforderungsdokument zum originalen KI-Verhalten):
+  - **Diplomatisches Gedächtnis**: ein Groll-Wert pro Imperiumspaar steigt
+    bei unprovozierter Kriegserklärung (+40) und einseitig gekündigten
+    Handelsabkommen (+15) und bleibt über Statuswechsel hinweg bestehen. Er
+    senkt danach dauerhaft die KI-Bereitschaft, Frieden zu schließen oder
+    Handelsabkommen anzunehmen – zusätzlich zu den bestehenden
+    Persönlichkeits-/Kriegsneigungsfaktoren.
+  - **Zielbewertungs-Algorithmus**: Kolonisierungs- und Angriffsziele der KI
+    werden jetzt nach `PlanetValue = PlanetSize / 1.045^TimeToDevelop +
+    Spezialwert` bewertet (Spezialwert nach Biom-Stufe 0–6, Rich/Artefakt
+    ×2, Ultra-Rich ×3, exakt wie im Quelldokument beziffert) statt nach
+    reiner Distanz – ersetzt sowohl das "nächstbeste Ziel" bei der
+    Kolonisierung als auch das bisherige "immer die gegnerische Heimatwelt"
+    bei Angriffen. Bewusst ohne Berücksichtigung der gegnerischen
+    Verteidigungsstärke, wie in der Quelle beschrieben. *Vereinfacht:* keine
+    Raketenbasen-Abschreckung, da dieses Remake keine diskreten planetaren
+    Verteidigungsbauten kennt.
+  - **Orion-Sperr-Timer**: KI ignoriert das bewachte Orion-System bis exakt
+    Runde 121 vollständig; danach greifen hinreichend kriegerische Imperien
+    mit einer Heimatflotte ab 20 Schiffen gelegentlich den Guardian an
+    (derselbe Automatik-Kampf wie beim Spieler, siehe v0.10).
+  - **Rebellion stürzt Herrscher**: eine erfolgreiche Rebellions-Spionage
+    gegen ein KI-Imperium hat eine Zusatzchance, Persönlichkeit und
+    strategisches Ziel des Opfers komplett neu zu würfeln – der Spieler kann
+    so gezielt versuchen, einen feindlichen Machthaber zu stürzen.
+  - **Verteidigungspriorisierung**: steht ein Kriegsgegner an oder auf dem
+    Weg zu einem eigenen System, ruft die KI alle offensiven Flottenbewegungen
+    sofort zurück (neue Funktion `recallFleet`), bevor sie neue Angriffe
+    startet – "im Kriegsfall zuerst der Schutz der eigenen Planeten".
+  - Bereits ohne Änderung erfüllt: kein Fog of War (KI sieht immer die volle
+    Galaxie), keine Synchronisation mehrerer KI-Angriffsflotten
+    untereinander, keine Vorab-Prüfung der eigenen/gegnerischen
+    Kampfkraft vor einem Angriff.
 
 ## Weitere Post-Prototyp-Releases
 

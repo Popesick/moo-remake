@@ -17,3 +17,7 @@ export const BASE_DETECTION_CHANCE = 0.35;
 export const DARLOK_DETECTION_REDUCTION = 0.15; // formwandelnde Spione: schwerer zu entdecken
 export const DARLOK_FRAME_SUCCESS_CHANCE = 0.85; // "insbesondere die formwandelnden Darloks"
 export const DEFAULT_FRAME_SUCCESS_CHANCE = 0.5;
+
+// "MoO KI Verhalten.docx" (ROADMAP v0.12): erfolgreiche Rebellionen können
+// bei KI-Imperien den Herrscher stürzen und Persönlichkeit/Ziel neu würfeln.
+export const REBELLION_PERSONALITY_CHANGE_CHANCE = 0.35;
