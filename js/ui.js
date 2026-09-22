@@ -498,3 +498,73 @@ export function openBattleDialog() {
 export function closeBattleDialog() {
   document.getElementById("battle-dialog").hidden = true;
 }
+
+export function renderDiplomacyDialog(galaxy, callbacks) {
+  const container = document.getElementById("diplomacy-list");
+  container.innerHTML = "";
+  const player = galaxy.empires.find((e) => e.isPlayer);
+  if (!player) return;
+
+  for (const empire of galaxy.empires) {
+    if (empire.id === player.id) continue;
+    const relation = callbacks.getRelation(empire.id);
+    const race = getRace(empire.raceId);
+
+    const row = document.createElement("div");
+    row.className = "design-row";
+    const title = document.createElement("div");
+    title.className = "design-row-head";
+    title.innerHTML = `<strong>${race?.name ?? empire.name}</strong><span>${relation.status === "war" ? "Krieg" : "Frieden"}</span>`;
+    row.appendChild(title);
+
+    const btn = document.createElement("button");
+    if (relation.status === "war") {
+      btn.textContent = "Frieden anbieten";
+      btn.addEventListener("click", () => callbacks.onProposePeace(empire.id));
+    } else {
+      btn.textContent = "Krieg erklären";
+      btn.addEventListener("click", () => callbacks.onDeclareWar(empire.id));
+    }
+    row.appendChild(btn);
+
+    container.appendChild(row);
+  }
+}
+
+export function openDiplomacyDialog() {
+  document.getElementById("diplomacy-dialog").hidden = false;
+}
+
+export function closeDiplomacyDialog() {
+  document.getElementById("diplomacy-dialog").hidden = true;
+}
+
+export function renderGameEnd(gameEnd, galaxy) {
+  const title = document.getElementById("gameend-title");
+  const container = document.getElementById("gameend-scores");
+  container.innerHTML = "";
+
+  const winner = galaxy.empires.find((e) => e.id === gameEnd.winnerEmpireId);
+  const winnerRace = getRace(winner?.raceId);
+  const reasonText = gameEnd.reason === "elimination"
+    ? "Sieg durch Elimination aller Rivalen"
+    : `Rundenlimit erreicht (Runde ${galaxy.turn - 1})`;
+  title.textContent = `Spielende – ${reasonText}`;
+
+  for (const entry of gameEnd.scores) {
+    const empire = galaxy.empires.find((e) => e.id === entry.empireId);
+    const race = getRace(empire?.raceId);
+    const row = document.createElement("div");
+    row.className = "design-row";
+    row.innerHTML = `<div class="design-row-head"><strong>${race?.name ?? entry.empireId}${empire?.id === gameEnd.winnerEmpireId ? " 🏆" : ""}</strong><span>${empire?.eliminated ? "Eliminiert" : `${entry.score} Punkte`}</span></div>`;
+    container.appendChild(row);
+  }
+}
+
+export function openGameEndDialog() {
+  document.getElementById("gameend-dialog").hidden = false;
+}
+
+export function closeGameEndDialog() {
+  document.getElementById("gameend-dialog").hidden = true;
+}

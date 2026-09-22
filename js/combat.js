@@ -54,7 +54,7 @@ function buildUnits(fleets, empireId, empire) {
           maxHp: stats.hp,
           shield: stats.shieldAbsorption,
           speed: stats.speed,
-          hullEvasionBonus: stats.hullEvasionBonus,
+          hullEvasionBonus: stats.hullEvasionBonus + (empire?.maneuverBonus ?? 0), // Alkari: +3 Manövrierfähigkeit
           attackRating,
           ecmDefense,
           weapons: stats.weaponLines,

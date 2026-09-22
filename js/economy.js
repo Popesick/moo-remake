@@ -7,6 +7,10 @@ import { computeDesignStats } from "./shipDesign.js";
 import { addShipsToSystem, advanceFleets } from "./fleets.js";
 import { resolveSystemCombat } from "./combat.js";
 import { DEFAULT_TRAVEL_SPEED } from "./data/logistics.js";
+import { getRaceTraits } from "./data/raceTraits.js";
+import { runAiTurn } from "./ai.js";
+import { isAtWar } from "./diplomacy.js";
+import { checkGameEnd } from "./victory.js";
 import {
   BASE_BC_PER_POP,
   BASE_BC_PER_FACTORY,
@@ -33,6 +37,7 @@ export function maxPopulation(planet, empire) {
 
 export function isColonizable(planet, empire) {
   if (planet.colonizedBy !== null && planet.colonizedBy !== undefined) return false;
+  if (empire?.instantColonization) return true; // Silicoiden: sofortige Besiedlung aller Welten
   const env = getEnvironment(planet.environment);
   const techLevel = empire?.planetologyTechLevel ?? 0;
   return env.techReq <= techLevel;
@@ -40,15 +45,16 @@ export function isColonizable(planet, empire) {
 
 export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
   const difficulty = getDifficulty(difficultyId);
+  const traits = getRaceTraits(empire.raceId);
   const base = {
     ...empire,
     colonyShips: 1,
     shipProgress: 0,
     defenseBudget: 0,
     planetologyTechLevel: 0,
-    roboticControlsLevel: ROBOTIC_CONTROLS_BASE,
+    roboticControlsLevel: ROBOTIC_CONTROLS_BASE + (traits.roboticControlsBonus ?? 0),
     factoryCostBC: FACTORY_COST_BC,
-    wasteGenerationMultiplier: 1,
+    wasteGenerationMultiplier: traits.pollutionImmune ? 0 : 1,
     ecoCleanupUnitsPerBC: DEFAULT_ECO_CLEANUP_UNITS_PER_BC,
     popCapacityMultiplier: 1,
     popCapacityFlatBonus: 0,
@@ -56,8 +62,15 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     lastResearchIncome: 0,
     travelSpeedParsec: DEFAULT_TRAVEL_SPEED,
     shipDesigns: [],
-    attackBonus: 0,
+    attackBonus: traits.attackBonus ?? 0,
     ecmDefense: 0,
+    maneuverBonus: traits.maneuverBonus ?? 0,
+    productionMultiplier: 1 + (traits.productionBonusPct ?? 0) / 100,
+    popProductionMultiplier: traits.popProductionMultiplier ?? 1,
+    researchMultiplier: 1 + (traits.researchBonusPct ?? 0) / 100,
+    growthRateMultiplier: traits.growthRateMultiplier ?? 1,
+    instantColonization: traits.instantColonization ?? false,
+    pollutionImmune: traits.pollutionImmune ?? false,
   };
   const { research, initialBreakthroughs } = initEmpireResearch(seed, empire.id, empire.raceId);
   base.research = research;
@@ -73,9 +86,13 @@ export function computePlanetProduction(planet, empire) {
   const roboticControls = empire?.roboticControlsLevel ?? ROBOTIC_CONTROLS_BASE;
   const activeFactories = Math.min(planet.factories, Math.floor(planet.population * roboticControls));
 
-  const baseBC = planet.population * BASE_BC_PER_POP;
+  const popProductionMultiplier = empire?.popProductionMultiplier ?? 1; // Klackons: verdoppelte Basisproduktion
+  const productionMultiplier = empire?.productionMultiplier ?? 1; // Menschen: +20% Handelsbonus
+  const researchMultiplier = empire?.researchMultiplier ?? 1; // Psilons: +50% Forschung
+
+  const baseBC = planet.population * BASE_BC_PER_POP * popProductionMultiplier;
   const factoryBC = activeFactories * BASE_BC_PER_FACTORY * richness.multiplier;
-  const totalBC = baseBC + factoryBC;
+  const totalBC = (baseBC + factoryBC) * productionMultiplier;
 
   const s = planet.sliders;
   const bc = {
@@ -83,7 +100,7 @@ export function computePlanetProduction(planet, empire) {
     def: (totalBC * s.def) / 100,
     ind: (totalBC * s.ind) / 100,
     eco: (totalBC * s.eco) / 100,
-    tech: (totalBC * s.tech) / 100,
+    tech: ((totalBC * s.tech) / 100) * researchMultiplier,
   };
 
   const factoryCostBC = empire?.factoryCostBC ?? FACTORY_COST_BC;
@@ -113,6 +130,11 @@ export function computePlanetProduction(planet, empire) {
 export function simulateTurn(galaxy) {
   const empireById = new Map(galaxy.empires.map((e) => [e.id, e]));
   const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, shipBC: 0, defBC: 0 }]));
+  const turnForAi = galaxy.turn ?? 1;
+
+  for (const empire of galaxy.empires) {
+    if (!empire.isPlayer) runAiTurn(galaxy, empire, galaxy.seed, turnForAi);
+  }
 
   for (const system of galaxy.systems) {
     for (const planet of system.planets) {
@@ -131,7 +153,8 @@ export function simulateTurn(galaxy) {
       // Bevölkerungswachstum: Glockenkurve mit Scheitel bei 50% Kapazität,
       // gedämpft durch nicht beseitigte Verschmutzung.
       const x = Math.min(1, planet.population / prod.maxPop);
-      const growthRate = MAX_GROWTH_RATE * 4 * x * (1 - x) * (1 - prod.pollutionPenalty);
+      const growthRateMultiplier = empire?.growthRateMultiplier ?? 1; // Sakkra ×2, Silicoiden ×0,5
+      const growthRate = MAX_GROWTH_RATE * 4 * x * (1 - x) * (1 - prod.pollutionPenalty) * growthRateMultiplier;
       planet.population = Math.min(prod.maxPop, Math.max(0.1, planet.population + planet.population * growthRate));
 
       planet.lastProduction = prod;
@@ -184,7 +207,8 @@ export function simulateTurn(galaxy) {
   const battleReports = resolveAllCombats(galaxy);
 
   galaxy.turn = turn + 1;
-  return { breakthroughsByEmpire, arrivals, battleReports };
+  const gameEnd = checkGameEnd(galaxy);
+  return { breakthroughsByEmpire, arrivals, battleReports, gameEnd };
 }
 
 // Löst an jedem System, an dem stationäre Flotten mehrerer Imperien
@@ -198,8 +222,21 @@ function resolveAllCombats(galaxy) {
 
   for (const systemId of systemIds) {
     const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
-    const empireIds = new Set(fleetsHere.map((f) => f.ownerEmpireId));
-    if (empireIds.size < 2) continue;
+    const empireIds = [...new Set(fleetsHere.map((f) => f.ownerEmpireId))];
+    if (empireIds.length < 2) continue;
+
+    // Vereinfachung: Kampf löst nur aus, wenn sich ALLE hier anwesenden
+    // Imperien paarweise im Krieg befinden (kein Nichtangriffspakt-Dreieck).
+    let allAtWar = true;
+    for (let i = 0; i < empireIds.length && allAtWar; i++) {
+      for (let j = i + 1; j < empireIds.length; j++) {
+        if (!isAtWar(galaxy, empireIds[i], empireIds[j])) {
+          allAtWar = false;
+          break;
+        }
+      }
+    }
+    if (!allAtWar) continue;
 
     const result = resolveSystemCombat(fleetsHere, galaxy.empires);
     if (!result) continue;

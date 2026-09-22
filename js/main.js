@@ -6,6 +6,8 @@ import { normalizeSliders } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
 import { sendFleet, splitStack } from "./fleets.js";
+import { getRelation, setRelationStatus } from "./diplomacy.js";
+import { getPersonality } from "./data/aiPersonality.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
@@ -18,6 +20,12 @@ import {
   renderBattleReports,
   openBattleDialog,
   closeBattleDialog,
+  renderDiplomacyDialog,
+  openDiplomacyDialog,
+  closeDiplomacyDialog,
+  renderGameEnd,
+  openGameEndDialog,
+  closeGameEndDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -139,15 +147,48 @@ const shipDesignCallbacks = {
   },
 };
 
+const diplomacyCallbacks = {
+  getRelation(otherEmpireId) {
+    const player = getPlayerEmpire();
+    return getRelation(gameState.galaxy, player.id, otherEmpireId);
+  },
+  onDeclareWar(otherEmpireId) {
+    const player = getPlayerEmpire();
+    setRelationStatus(gameState.galaxy, player.id, otherEmpireId, "war");
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    saveGame();
+  },
+  onProposePeace(otherEmpireId) {
+    const player = getPlayerEmpire();
+    const other = getEmpire(otherEmpireId);
+    const personality = getPersonality(other.personalityId);
+    const acceptChance = personality.erratic ? 0.5 : 1 - personality.warBias;
+    if (Math.random() < acceptChance) {
+      setRelationStatus(gameState.galaxy, player.id, otherEmpireId, "peace");
+      flashTopbar(`${other.name} nimmt das Friedensangebot an.`);
+    } else {
+      flashTopbar(`${other.name} lehnt den Frieden ab.`);
+    }
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    saveGame();
+  },
+};
+
 function endTurn() {
   if (!gameState.galaxy) return;
-  const { breakthroughsByEmpire, arrivals, battleReports } = simulateTurn(gameState.galaxy);
+  const { breakthroughsByEmpire, arrivals, battleReports, gameEnd } = simulateTurn(gameState.galaxy);
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
   requestRender();
   saveGame();
 
   const playerEmpire = getPlayerEmpire();
+
+  if (gameEnd) {
+    renderGameEnd(gameEnd, gameState.galaxy);
+    openGameEndDialog();
+    return;
+  }
 
   const playerBattles = battleReports.filter((r) => r.empireIds.includes(playerEmpire.id));
   if (playerBattles.length > 0) {
@@ -277,6 +318,15 @@ function setupDialogAndButtons() {
   document.getElementById("shipdesign-close").addEventListener("click", closeShipDesignDialog);
 
   document.getElementById("battle-close").addEventListener("click", closeBattleDialog);
+
+  document.getElementById("btn-diplomacy").addEventListener("click", () => {
+    if (!gameState.galaxy) return;
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    openDiplomacyDialog();
+  });
+  document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacyDialog);
+
+  document.getElementById("gameend-close").addEventListener("click", closeGameEndDialog);
 
   document.getElementById("btn-save").addEventListener("click", () => {
     const ok = saveGame();

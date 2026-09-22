@@ -5,6 +5,8 @@ import { RICHNESS_WEIGHTS } from "./data/richness.js";
 import { PLANET_SIZE_WEIGHTS } from "./data/planetSizes.js";
 import { RACES } from "./data/races.js";
 import { initEmpireEconomy, initColony } from "./economy.js";
+import { assignAiBehavior, createStarterDesign } from "./ai.js";
+import { initRelations } from "./diplomacy.js";
 
 export const GALAXY_SIZES = {
   small: { label: "Klein (Small)", systems: 24, width: 2200, height: 1500 },
@@ -126,7 +128,13 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
   const empires = generateEmpires(rng, empireCount, numericSeed, difficultyId);
   assignHomeworlds(rng, systems, empires);
 
-  return {
+  for (const empire of empires) {
+    if (empire.isPlayer) continue;
+    assignAiBehavior(rng, empire);
+    createStarterDesign(empire);
+  }
+
+  const galaxy = {
     seed: numericSeed,
     sizeId,
     difficultyId,
@@ -140,6 +148,8 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
     nextFleetId: 1,
     createdAt: Date.now(),
   };
+  initRelations(galaxy);
+  return galaxy;
 }
 
 // Empire 0 ist immer der Spieler und spielt die Menschen; die KI-Imperien

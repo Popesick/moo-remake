@@ -15,6 +15,7 @@
       <div id="topbar-actions">
         <button id="btn-research">Forschung</button>
         <button id="btn-shipdesign">Schiffsdesign</button>
+        <button id="btn-diplomacy">Diplomatie</button>
         <button id="btn-end-turn">Runde beenden</button>
         <button id="btn-new-game">Neue Galaxie</button>
         <button id="btn-save">Speichern</button>
@@ -108,6 +109,32 @@
         <div id="shipdesign-editor"></div>
         <div class="dialog-actions">
           <button id="shipdesign-close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="diplomacy-dialog" class="dialog-overlay" hidden>
+      <div class="dialog dialog-wide">
+        <h2>Diplomatie</h2>
+        <p class="dialog-hint">
+          Einfache Diplomatie: Krieg oder Frieden pro Imperium. Ob ein
+          Friedensangebot angenommen wird, hängt von der KI-Persönlichkeit
+          ab. Verträge, Handelsabkommen und der Galaktische Rat folgen in
+          einem späteren Release.
+        </p>
+        <div id="diplomacy-list"></div>
+        <div class="dialog-actions">
+          <button id="diplomacy-close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="gameend-dialog" class="dialog-overlay" hidden>
+      <div class="dialog dialog-wide">
+        <h2 id="gameend-title">Spielende</h2>
+        <div id="gameend-scores"></div>
+        <div class="dialog-actions">
+          <button id="gameend-close">Weiterspielen</button>
         </div>
       </div>
     </div>
