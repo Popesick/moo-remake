@@ -17,6 +17,27 @@ const DRIVE_COST_BASE = 5;
 const DRIVE_COST_PER_SPEED = 4;
 const ARMOR_COST_PER_SPACE = 0.15;
 
+// Miniaturisierung (ROADMAP v0.10), siehe techtree-analyse.docx: Je weiter
+// das kumulierte Forschungsniveau einer Disziplin über das Level einer
+// Komponente hinausgeht, desto kompakter (-66% Platz) und billiger (-50%
+// Kosten) wird deren Fertigung. *Vereinfacht:* stetige Funktion über
+// empire.research.effectiveTechLevel statt separater "Advanced
+// Technologies"-Einträge (Level 51-99) – die Quelle beziffert diese ohnehin
+// nur als reine Miniaturisierung ohne eigene Inhalte.
+const MINIATURIZATION_LEVEL_RANGE = 40;
+const MINIATURIZATION_COST_FLOOR = 0.5;
+const MINIATURIZATION_SPACE_FLOOR = 1 / 3;
+
+export function miniaturizationFactor(empire, tech) {
+  const empireLevel = empire?.research?.effectiveTechLevel?.[tech.discipline] ?? tech.level;
+  const diff = Math.max(0, empireLevel - tech.level);
+  const t = Math.min(1, diff / MINIATURIZATION_LEVEL_RANGE);
+  return {
+    costMultiplier: 1 - t * (1 - MINIATURIZATION_COST_FLOOR),
+    spaceMultiplier: 1 - t * (1 - MINIATURIZATION_SPACE_FLOOR),
+  };
+}
+
 export function modulesOfKind(kind, empire) {
   const completed = new Set(empire?.research?.completedTechs ?? []);
   return TECHS.filter((t) => t.module?.kind === kind && completed.has(t.id));
@@ -45,7 +66,7 @@ function armorCost(hull, tech) {
 // Berechnet Gesamtkosten/-platz/-HP/-Geschwindigkeit eines Designs. weapons:
 // [{ techId, count }]. armorId/shieldId/driveId dürfen leer sein (kein
 // Modul gewählt); driveId leer -> Geschwindigkeit 1 (Retro Engines Minimum).
-export function computeDesignStats(design) {
+export function computeDesignStats(design, empire) {
   const hull = getHull(design.hullId);
   if (!hull) return null;
 
@@ -56,14 +77,18 @@ export function computeDesignStats(design) {
   let spaceUsed = 0;
   let costBC = hull.baseCostBC;
 
-  if (armor) costBC += armorCost(hull, armor);
+  if (armor) {
+    costBC += armorCost(hull, armor) * miniaturizationFactor(empire, armor).costMultiplier;
+  }
   if (shield) {
-    spaceUsed += SHIELD_SPACE;
-    costBC += shieldCost(shield);
+    const { costMultiplier, spaceMultiplier } = miniaturizationFactor(empire, shield);
+    spaceUsed += SHIELD_SPACE * spaceMultiplier;
+    costBC += shieldCost(shield) * costMultiplier;
   }
   if (drive) {
-    spaceUsed += DRIVE_SPACE;
-    costBC += driveCost(drive);
+    const { costMultiplier, spaceMultiplier } = miniaturizationFactor(empire, drive);
+    spaceUsed += DRIVE_SPACE * spaceMultiplier;
+    costBC += driveCost(drive) * costMultiplier;
   }
 
   const weaponLines = (design.weapons ?? [])
@@ -71,9 +96,12 @@ export function computeDesignStats(design) {
     .filter((w) => w.tech?.module?.kind === "weapon");
 
   for (const { tech, count } of weaponLines) {
-    spaceUsed += weaponSpaceCost(tech) * count;
-    costBC += weaponUnitCost(tech) * count;
+    const { costMultiplier, spaceMultiplier } = miniaturizationFactor(empire, tech);
+    spaceUsed += weaponSpaceCost(tech) * spaceMultiplier * count;
+    costBC += weaponUnitCost(tech) * costMultiplier * count;
   }
+
+  spaceUsed = Math.ceil(spaceUsed);
 
   return {
     hull,
@@ -98,7 +126,7 @@ export function addShipDesign(empire, design) {
   if (!canAddDesign(empire)) {
     return { ok: false, reason: `Design-Limit erreicht (max. ${MAX_SHIP_DESIGNS}). Erst ein Design verschrotten.` };
   }
-  const stats = computeDesignStats(design);
+  const stats = computeDesignStats(design, empire);
   if (!stats) return { ok: false, reason: "Ungültiger Rumpf." };
   if (stats.overCapacity) return { ok: false, reason: "Design überschreitet die Raumkapazität des Rumpfs." };
 

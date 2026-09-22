@@ -43,7 +43,7 @@ function buildUnits(fleets, empireId, empire) {
     for (const stack of fleet.stacks) {
       const design = shipDesigns.find((d) => d.id === stack.designId);
       if (!design) continue;
-      const stats = computeDesignStats(design);
+      const stats = computeDesignStats(design, empire);
       for (let i = 0; i < stack.count; i++) {
         units.push({
           id: `${empireId}-${uid++}`,
@@ -65,22 +65,10 @@ function buildUnits(fleets, empireId, empire) {
   return units;
 }
 
-// Löst ein automatisches Gefecht zwischen allen an einem System stationierten
-// Flotten unterschiedlicher Imperien auf (siehe design-analyse.docx,
-// mathematische Auflösung des taktischen Raumkampfes). Kein interaktives
-// Grid – Positionierung/Reichweite sind für den Prototyp vereinfacht auf
-// einen abstrakten Nahbereich ohne Beam-Distanzabfall.
-export function resolveSystemCombat(fleetsAtSystem, empires) {
-  const empireIds = [...new Set(fleetsAtSystem.map((f) => f.ownerEmpireId))];
-  if (empireIds.length < 2) return null;
-
-  let units = [];
-  for (const empireId of empireIds) {
-    const empire = empires.find((e) => e.id === empireId);
-    const fleets = fleetsAtSystem.filter((f) => f.ownerEmpireId === empireId);
-    units = units.concat(buildUnits(fleets, empireId, empire));
-  }
-
+// Kern der Rundenauflösung: gemeinsam genutzt von resolveSystemCombat
+// (Imperium gegen Imperium) und resolveGuardianBattle (Imperium(en) gegen
+// den Guardian of Orion, siehe ROADMAP v0.10).
+function runBattleRounds(units, participantIds) {
   const log = [];
   let round = 1;
   while (round <= MAX_ROUNDS) {
@@ -131,24 +119,90 @@ export function resolveSystemCombat(fleetsAtSystem, empires) {
   const winnerEmpireId = survivorEmpires.size === 1 ? [...survivorEmpires][0] : null;
 
   const survivorsByEmpire = new Map();
-  for (const empireId of empireIds) {
-    const alive = units.filter((u) => u.empireId === empireId && u.hp > 0);
+  for (const id of participantIds) {
+    const alive = units.filter((u) => u.empireId === id && u.hp > 0);
     const stacks = new Map();
     for (const u of alive) stacks.set(u.designId, (stacks.get(u.designId) ?? 0) + 1);
-    survivorsByEmpire.set(empireId, [...stacks.entries()].map(([designId, count]) => ({ designId, count })));
+    survivorsByEmpire.set(id, [...stacks.entries()].map(([designId, count]) => ({ designId, count })));
   }
 
   return {
-    empireIds,
+    empireIds: participantIds,
     winnerEmpireId,
     rounds: round - 1,
     log,
     survivorsByEmpire,
     shipsLostByEmpire: Object.fromEntries(
-      empireIds.map((id) => [
+      participantIds.map((id) => [
         id,
         units.filter((u) => u.empireId === id).length - (survivorsByEmpire.get(id)?.reduce((s, x) => s + x.count, 0) ?? 0),
       ])
     ),
   };
 }
+
+// Löst ein automatisches Gefecht zwischen allen an einem System stationierten
+// Flotten unterschiedlicher Imperien auf (siehe design-analyse.docx,
+// mathematische Auflösung des taktischen Raumkampfes). Kein interaktives
+// Grid – Positionierung/Reichweite sind für den Prototyp vereinfacht auf
+// einen abstrakten Nahbereich ohne Beam-Distanzabfall.
+export function resolveSystemCombat(fleetsAtSystem, empires) {
+  const empireIds = [...new Set(fleetsAtSystem.map((f) => f.ownerEmpireId))];
+  if (empireIds.length < 2) return null;
+
+  let units = [];
+  for (const empireId of empireIds) {
+    const empire = empires.find((e) => e.id === empireId);
+    const fleets = fleetsAtSystem.filter((f) => f.ownerEmpireId === empireId);
+    units = units.concat(buildUnits(fleets, empireId, empire));
+  }
+
+  return runBattleRounds(units, empireIds);
+}
+
+// Neutrale, nicht-imperiale Gegner (ROADMAP v0.10): der Guardian of Orion
+// sowie galaktische Zufallsereignisse (Weltraum-Amöbe/Space Crystal, siehe
+// js/events.js) nehmen an keiner Diplomatie teil und kämpfen gegen ALLE an
+// ihrem System eintreffenden Flotten gemeinsam (Vereinfachung: kooperativer
+// Angriff unabhängig vom Kriegszustand der Angreifer untereinander).
+export const MONSTER_EMPIRE_ID = "monster";
+export const GUARDIAN_EMPIRE_ID = MONSTER_EMPIRE_ID;
+
+function buildMonsterUnit(monster) {
+  return {
+    id: "monster-0",
+    empireId: MONSTER_EMPIRE_ID,
+    designId: "monster",
+    designName: monster.name,
+    hp: monster.hp,
+    maxHp: monster.hp,
+    shield: monster.shield,
+    speed: monster.speed,
+    hullEvasionBonus: 0,
+    attackRating: monster.attackRating,
+    ecmDefense: 0,
+    weapons: monster.weapons,
+  };
+}
+
+// Generisches Monster-Gefecht (Guardian of Orion oder ein zufälliges
+// galaktisches Ereignis, siehe js/events.js): `monster` braucht nur
+// { name, hp, shield, speed, attackRating, weapons }.
+export function resolveMonsterBattle(fleetsAtSystem, empires, monster) {
+  const empireIds = [...new Set(fleetsAtSystem.map((f) => f.ownerEmpireId))];
+  if (empireIds.length === 0) return null;
+
+  let units = [];
+  for (const empireId of empireIds) {
+    const empire = empires.find((e) => e.id === empireId);
+    const fleets = fleetsAtSystem.filter((f) => f.ownerEmpireId === empireId);
+    units = units.concat(buildUnits(fleets, empireId, empire));
+  }
+  units.push(buildMonsterUnit(monster));
+
+  const result = runBattleRounds(units, [...empireIds, MONSTER_EMPIRE_ID]);
+  const monsterUnit = units.find((u) => u.empireId === MONSTER_EMPIRE_ID);
+  return { ...result, guardianDefeated: monsterUnit.hp <= 0, guardianRemainingHp: Math.max(0, monsterUnit.hp) };
+}
+
+export const resolveGuardianBattle = resolveMonsterBattle;

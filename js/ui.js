@@ -14,6 +14,7 @@ import { isSystemInRange } from "./fleets.js";
 import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import { COUNCIL_MAJORITY_RATIO } from "./data/diplomacyOptions.js";
 import { DEFAULT_TRAVEL_RANGE_PARSEC, UNLIMITED_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
+import { isOrionGuarded } from "./orion.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -269,8 +270,9 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callba
   li.appendChild(note);
 
   const inRange = isSystemInRange(galaxy, playerEmpire, system);
+  const guarded = isOrionGuarded(galaxy, system.id);
 
-  if (isColonizable(planet, playerEmpire) && inRange) {
+  if (isColonizable(planet, playerEmpire) && inRange && !guarded) {
     const btn = document.createElement("button");
     btn.className = "btn-colonize";
     btn.textContent = `Kolonisieren (${playerEmpire.colonyShips} Kolonieschiff${playerEmpire.colonyShips === 1 ? "" : "e"} verfügbar)`;
@@ -280,7 +282,9 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callba
   } else {
     const hint = document.createElement("div");
     hint.className = "colonize-hint";
-    if (!inRange) {
+    if (guarded) {
+      hint.textContent = "Bewacht vom Guardian of Orion – erst eine Kampfflotte hierher schicken und den Wächter besiegen.";
+    } else if (!inRange) {
       hint.textContent = `Außerhalb der Treibstoffreichweite (${playerEmpire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC} Parsec ab eigenen Kolonien) – weitere Fuel-Cell-Forschung nötig.`;
     } else {
       hint.textContent = env.techReq > 0
@@ -308,7 +312,12 @@ export function renderSystemPanel(system, galaxy, callbacks) {
 
   document.getElementById("system-name").textContent = system.name + (system.isHomeworld ? " ★" : "");
   const star = getStarType(system.star);
-  document.getElementById("system-star").textContent = `${star.name}${system.isHomeworld ? " · Heimatsystem" : ""}`;
+  const orionSuffix = system.isOrionSystem
+    ? galaxy.orion?.guardianAlive
+      ? " · Orion (bewacht vom Guardian)"
+      : " · Orion (Guardian besiegt)"
+    : "";
+  document.getElementById("system-star").textContent = `${star.name}${system.isHomeworld ? " · Heimatsystem" : ""}${orionSuffix}`;
 
   const list = document.getElementById("system-planets");
   list.innerHTML = "";
@@ -563,16 +572,24 @@ export function renderBattleReports(reports, galaxy) {
 
     const title = document.createElement("div");
     title.className = "design-row-head";
-    const winnerRace = report.winnerEmpireId !== null
-      ? getRace(galaxy.empires.find((e) => e.id === report.winnerEmpireId)?.raceId)?.name
-      : null;
-    title.innerHTML = `<strong>${system?.name ?? "Unbekanntes System"}</strong><span>${winnerRace ? `Sieg: ${winnerRace}` : "Unentschieden"}</span>`;
+    let statusText;
+    if (report.isGuardianBattle) {
+      const monsterName = report.monsterName ?? "Guardian of Orion";
+      statusText = report.guardianDefeated ? `${monsterName} besiegt!` : `${monsterName} wehrt den Angriff ab.`;
+    } else {
+      const winnerRace = report.winnerEmpireId !== null
+        ? getRace(galaxy.empires.find((e) => e.id === report.winnerEmpireId)?.raceId)?.name
+        : null;
+      statusText = winnerRace ? `Sieg: ${winnerRace}` : "Unentschieden";
+    }
+    title.innerHTML = `<strong>${system?.name ?? "Unbekanntes System"}</strong><span>${statusText}</span>`;
     box.appendChild(title);
 
     const lossLine = document.createElement("div");
     lossLine.className = "design-row-stats";
     lossLine.textContent = Object.entries(report.shipsLostByEmpire)
       .map(([empireId, lost]) => {
+        if (empireId === "monster") return `${report.monsterName ?? "Guardian of Orion"}: ${lost} Schiff(e) verloren`;
         const race = getRace(galaxy.empires.find((e) => e.id === Number(empireId))?.raceId);
         return `${race?.name ?? empireId}: ${lost} Schiff(e) verloren`;
       })

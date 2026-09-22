@@ -4,6 +4,7 @@ import { PARSEC_PIXELS } from "./data/logistics.js";
 const STAR_RADIUS_BASE = 6;
 const SELECT_RING_COLOR = "#5b9dff";
 const HOME_RING_COLOR = "#ffb454";
+const ORION_RING_COLOR = "#b46cff";
 
 let starfield = null;
 let starfieldSeedKey = null;
@@ -133,6 +134,18 @@ export function render(canvas, galaxy, camera, selectedSystemId, rangeOverlay) {
       ctx.stroke();
     }
 
+    // Orion-System (ROADMAP v0.10): gestrichelter violetter Ring, solange
+    // der Guardian aktiv ist, durchgezogen sobald er besiegt wurde.
+    if (system.isOrionSystem) {
+      ctx.strokeStyle = ORION_RING_COLOR;
+      ctx.lineWidth = 2;
+      if (galaxy.orion?.guardianAlive) ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius + 14, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     ctx.fillStyle = star.color;
     ctx.shadowColor = star.color;
     ctx.shadowBlur = 8 * Math.max(0.6, camera.zoom);
@@ -151,10 +164,10 @@ export function render(canvas, galaxy, camera, selectedSystemId, rangeOverlay) {
     }
 
     if (camera.zoom > 0.7) {
-      ctx.fillStyle = "#aab4d6";
+      ctx.fillStyle = system.isOrionSystem ? ORION_RING_COLOR : "#aab4d6";
       ctx.font = "11px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(system.name, p.x, p.y + radius + 14);
+      ctx.fillText(system.isOrionSystem ? `${system.name} (Orion)` : system.name, p.x, p.y + radius + 14);
       ctx.textAlign = "left";
     }
   }

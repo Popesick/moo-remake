@@ -152,9 +152,40 @@ spielbar von der Kolonisierung bis zum Sieg.
   tatsächlichen Systemdichte dieses Remakes passen müssen, statt Spieler an
   ihrem Heimatsystem festzunageln.
 
+- **v0.10 – Orion-System & Guardian, Miniaturisierung, galaktische Zufallsereignisse**
+  Miniaturisierung: Komponentenkosten und -platzbedarf im Schiffsdesign
+  sinken jetzt tatsächlich, je weiter das kumulierte Forschungsniveau einer
+  Disziplin (`effectiveTechLevel`, seit v0.3 berechnet, aber bis jetzt
+  wirkungslos) über das Level einer Komponente hinausgeht – bis zu -50 %
+  Kosten und -66 % Platz, exakt wie in der Quelle beziffert. Ein
+  Hochskalieren um 40 Levels erreicht die volle Miniaturisierung.
+
+  Orion-System & Guardian: ein zufälliges Nicht-Heimatsystem wird zur
+  Orion-Welt (Artefakt, Ultra-Rich, Huge) und vom Guardian of Orion bewacht
+  (10.000 HP, Schild Klasse 9, Death Ray 200-1000 Schaden) – auf der Karte
+  violett markiert. Kolonisierung ist erst nach seiner Zerstörung möglich;
+  jede an seinem System stationierte Flotte kämpft automatisch gegen ihn
+  (kooperativ, falls mehrere Imperien gleichzeitig anwesend sind). Der
+  Sieger erhält den Death Ray dauerhaft als Schiffsdesign-Waffe sowie einen
+  pauschalen Miniaturisierungssprung (+15 effektive Levels) über alle
+  Disziplinen – als Abstraktion der "vier zufälligen Advanced
+  Technologies" aus dem Original, da dieses Remake keine diskreten
+  Advanced-Technologies-Level 51-99 modelliert.
+
+  Galaktische Zufallsereignisse: ab Runde 15 pro Runde eine geringe Chance
+  auf einen Kometeneinschlag (Bevölkerungs-/Fabrikverlust auf einem
+  zufälligen Planeten), eine Supernova (dasselbe für ein ganzes System) oder
+  ein Weltraum-Monster (Pulsarwaffe 1-1000 Schaden, kämpft gegen eine
+  verteidigende Flotte oder bombardiert sonst den Planeten direkt) – dieselbe
+  Kampf-Infrastruktur wie der Guardian, nur mit schwächeren Werten.
+  *Vereinfacht:* Space Amoeba und Space Crystal sind zu einem generischen
+  Monster zusammengefasst; kein Kometen-Abschuss durch Verteidigungsflotten
+  (Schaden ist unausweichlich); KI greift den Guardian nicht proaktiv an;
+  genau ein Guardian-/Monster-Gefecht pro Runde ohne persistenten Schaden
+  über mehrere Runden hinweg.
+
 ## Weitere Post-Prototyp-Releases
 
-- v0.10 Orion-System & Guardian, Miniaturisierungs-Inhalte, galaktische Zufallsereignisse
 - v0.11 Highscore/Hall-of-Fame-Formel (inkl. Guardian-/Kill-Boni)
 - Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign
   neuer Schiffsklassen im Spielverlauf, Beam-Distanzabfall

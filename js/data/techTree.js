@@ -188,6 +188,13 @@ export const TECHS = [
   { id: "wpn_neutron_stream", discipline: "weapons", level: 47, name: "Neutron Stream Proj", effect: { type: "flavor" }, description: "Schaden = 40% der Ziel-HP.", module: { kind: "weapon", dmgMin: 0, dmgMax: 0, shots: 1, percentTargetHP: 0.4 } },
   { id: "wpn_mauler", discipline: "weapons", level: 48, name: "Mauler Device", effect: { type: "flavor" }, description: "Schaden 20-100, ignoriert Schilde fast vollständig.", module: { kind: "weapon", dmgMin: 20, dmgMax: 100, shots: 1, ignoresShields: true } },
   { id: "wpn_plasma_torpedo", discipline: "weapons", level: 50, name: "Plasma Torpedoes", effect: { type: "flavor" }, description: "Schaden 150, feuert alle 2 Runden.", module: { kind: "weapon", dmgMin: 150, dmgMax: 150, shots: 1, everyOtherTurn: true } },
+  // Vorläufer-Technologie (ROADMAP v0.10): nicht über die reguläre
+  // Zufallsverteilung erforschbar (hidden:true blendet sie aus
+  // techsForDiscipline/rollAvailableTechs aus), nur als Beute für die
+  // Zerstörung des Guardian of Orion erhältlich, siehe js/orion.js und
+  // design-analyse.docx ("transferiert den Death Ray dauerhaft in das
+  // Arsenal des Spielers").
+  { id: "guardian_death_ray", discipline: "weapons", level: 60, name: "Death Ray", hidden: true, effect: { type: "flavor" }, description: "Vorläufer-Waffe, Schaden 200-1000. Beute für die Zerstörung des Guardian of Orion.", module: { kind: "weapon", dmgMin: 200, dmgMax: 1000, shots: 1 } },
 ];
 
 export function getTech(id) {
@@ -195,7 +202,7 @@ export function getTech(id) {
 }
 
 export function techsForDiscipline(disciplineId) {
-  return TECHS.filter((t) => t.discipline === disciplineId).sort((a, b) => a.level - b.level);
+  return TECHS.filter((t) => t.discipline === disciplineId && !t.hidden).sort((a, b) => a.level - b.level);
 }
 
 export function rungOf(level) {

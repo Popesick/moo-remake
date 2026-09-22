@@ -12,6 +12,8 @@ import { runAiTurn } from "./ai.js";
 import { isAtWar, tickTradeAgreements } from "./diplomacy.js";
 import { checkCouncilActivation, checkCouncilVoteDue } from "./council.js";
 import { checkGameEnd } from "./victory.js";
+import { resolveOrionGuardianCombat, isOrionGuarded } from "./orion.js";
+import { maybeTriggerGalacticEvent } from "./events.js";
 import { ESPIONAGE_GENERATION_RATE, DEFAULT_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import {
   BASE_BC_PER_POP,
@@ -182,7 +184,7 @@ export function simulateTurn(galaxy) {
           // Planet baut ein Kriegsschiff-Design statt Kolonieschiffe (siehe
           // ROADMAP v0.4): Ship-Slider-BC fließt in dieses Design, fertige
           // Schiffe erscheinen als Stack in einer Flotte im Heimatsystem.
-          const stats = computeDesignStats(design);
+          const stats = computeDesignStats(design, empire);
           const fund = prod.bc.ship + (planet.shipCarry ?? 0);
           const built = stats.costBC > 0 ? Math.floor(fund / stats.costBC) : 0;
           planet.shipCarry = fund - built * stats.costBC;
@@ -234,6 +236,20 @@ export function simulateTurn(galaxy) {
   const arrivals = advanceFleets(galaxy);
   const battleReports = resolveAllCombats(galaxy);
 
+  // Guardian of Orion (ROADMAP v0.10): unabhängig vom Diplomatiestatus, da
+  // der Guardian an keiner Diplomatie teilnimmt.
+  const guardianReport = resolveOrionGuardianCombat(galaxy);
+  if (guardianReport) battleReports.push(guardianReport);
+
+  // Galaktische Zufallsereignisse (ROADMAP v0.10): Kampf-förmige Ereignisse
+  // (Weltraum-Monster mit Verteidigern) laufen über dieselbe
+  // Battle-Report-Anzeige, reine Schadensereignisse (Komet/Supernova) als
+  // separate Meldung.
+  const galacticEvent = maybeTriggerGalacticEvent(galaxy);
+  if (galacticEvent?.isGuardianBattle) {
+    battleReports.push(galacticEvent);
+  }
+
   galaxy.turn = turn + 1;
   const gameEnd = checkGameEnd(galaxy);
 
@@ -247,7 +263,14 @@ export function simulateTurn(galaxy) {
     councilVote = checkCouncilVoteDue(galaxy);
   }
 
-  return { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote };
+  return {
+    breakthroughsByEmpire,
+    arrivals,
+    battleReports,
+    gameEnd,
+    councilVote,
+    galacticEvent: galacticEvent && !galacticEvent.isGuardianBattle ? galacticEvent : null,
+  };
 }
 
 // Löst an jedem System, an dem stationäre Flotten mehrerer Imperien
@@ -309,6 +332,9 @@ export function colonizePlanet(galaxy, systemId, planetId, empireId) {
   if (!planet) return { ok: false, reason: "Planet nicht gefunden." };
   if (!isColonizable(planet, empire)) {
     return { ok: false, reason: "Planet ist mit aktueller Technologie nicht kolonisierbar." };
+  }
+  if (isOrionGuarded(galaxy, systemId)) {
+    return { ok: false, reason: "Der Guardian of Orion bewacht dieses System noch." };
   }
   // Kolonieschiffe unterliegen derselben Treibstoffreichweite wie
   // Kampfflotten (ROADMAP v0.10), siehe js/fleets.js isSystemInRange.

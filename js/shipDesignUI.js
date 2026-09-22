@@ -11,8 +11,8 @@ function fmt(n, digits = 0) {
   return n.toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-function buildDesignRow(design, onScrap) {
-  const stats = computeDesignStats(design);
+function buildDesignRow(design, onScrap, empire) {
+  const stats = computeDesignStats(design, empire);
   const row = document.createElement("div");
   row.className = "design-row";
   const weaponSummary = stats.weaponLines.map((w) => `${w.count}× ${w.tech.name}`).join(", ") || "keine Waffen";
@@ -66,7 +66,7 @@ export function renderShipDesignDialog(galaxy, callbacks) {
     listEl.appendChild(empty);
   }
   for (const design of player.shipDesigns) {
-    listEl.appendChild(buildDesignRow(design, callbacks.onScrap));
+    listEl.appendChild(buildDesignRow(design, callbacks.onScrap, player));
   }
 
   const editorEl = document.getElementById("shipdesign-editor");
@@ -164,7 +164,7 @@ export function renderShipDesignDialog(galaxy, callbacks) {
   }
 
   function renderStatsPreview() {
-    const stats = computeDesignStats(currentDesign());
+    const stats = computeDesignStats(currentDesign(), player);
     statsEl.innerHTML = "";
     statsEl.textContent = `Platz ${stats.spaceUsed}/${stats.spaceTotal} · ${fmt(stats.costBC)} BC · HP ${fmt(stats.hp)} · Schild ${stats.shieldAbsorption} · Tempo ${stats.speed} Parsec`;
     if (stats.overCapacity) {

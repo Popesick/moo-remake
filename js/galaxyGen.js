@@ -7,6 +7,7 @@ import { RACES } from "./data/races.js";
 import { initEmpireEconomy, initColony } from "./economy.js";
 import { assignAiBehavior, createStarterDesign } from "./ai.js";
 import { initRelations } from "./diplomacy.js";
+import { initOrion } from "./orion.js";
 
 export const GALAXY_SIZES = {
   small: { label: "Klein (Small)", systems: 24, width: 2200, height: 1500 },
@@ -149,6 +150,7 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
     createdAt: Date.now(),
   };
   initRelations(galaxy);
+  initOrion(galaxy, rng);
   return galaxy;
 }
 

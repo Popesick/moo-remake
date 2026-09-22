@@ -294,11 +294,16 @@ const diplomacyCallbacks = {
   },
 };
 
-function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals) {
+function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent) {
   const playerBattles = battleReports.filter((r) => r.empireIds.includes(playerEmpire.id));
   if (playerBattles.length > 0) {
     renderBattleReports(playerBattles, gameState.galaxy);
     openBattleDialog();
+    return;
+  }
+
+  if (galacticEvent?.log) {
+    flashTopbar(galacticEvent.log);
     return;
   }
 
@@ -347,13 +352,13 @@ const councilCallbacks = {
       flashTopbar("Galaktischer Rat: keine Mehrheit erreicht.");
     }
 
-    finishTurnDisplay(playerEmpire, pending.battleReports, pending.breakthroughsByEmpire, pending.arrivals);
+    finishTurnDisplay(playerEmpire, pending.battleReports, pending.breakthroughsByEmpire, pending.arrivals, pending.galacticEvent);
   },
 };
 
 function endTurn() {
   if (!gameState.galaxy) return;
-  const { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote } = simulateTurn(gameState.galaxy);
+  const { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote, galacticEvent } = simulateTurn(gameState.galaxy);
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
   requestRender();
@@ -368,13 +373,13 @@ function endTurn() {
   }
 
   if (councilVote) {
-    pendingCouncilVote = { vote: councilVote, battleReports, breakthroughsByEmpire, arrivals };
+    pendingCouncilVote = { vote: councilVote, battleReports, breakthroughsByEmpire, arrivals, galacticEvent };
     renderCouncilDialog(gameState.galaxy, councilVote, councilCallbacks);
     openCouncilDialog();
     return;
   }
 
-  finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals);
+  finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent);
 }
 
 function setupCanvasInteractions() {
