@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MoO Remake</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div id="brand">MoO Remake</div>
+      <div id="topbar-info"></div>
+      <div id="topbar-actions">
+        <button id="btn-new-game">Neue Galaxie</button>
+        <button id="btn-save">Speichern</button>
+        <button id="btn-load">Laden</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <canvas id="galaxy-canvas"></canvas>
+
+      <aside id="side-panel">
+        <div id="side-panel-empty">Klicke auf ein Sternensystem, um Details zu sehen.</div>
+        <div id="system-details" hidden>
+          <h2 id="system-name"></h2>
+          <div id="system-star"></div>
+          <ul id="system-planets"></ul>
+        </div>
+      </aside>
+    </main>
+
+    <div id="new-game-dialog" class="dialog-overlay" hidden>
+      <div class="dialog">
+        <h2>Neue Galaxie</h2>
+        <label>
+          Größe
+          <select id="ng-size">
+            <option value="small">Klein (Small)</option>
+            <option value="medium" selected>Mittel (Medium)</option>
+            <option value="large">Groß (Large)</option>
+            <option value="huge">Riesig (Huge)</option>
+          </select>
+        </label>
+        <label>
+          Anzahl KI-Imperien
+          <select id="ng-empires">
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+          </select>
+        </label>
+        <label>
+          Seed (optional, für reproduzierbare Galaxien)
+          <input id="ng-seed" type="text" placeholder="leer = zufällig" />
+        </label>
+        <div class="dialog-actions">
+          <button id="ng-cancel">Abbrechen</button>
+          <button id="ng-confirm">Galaxie generieren</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

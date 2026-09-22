@@ -1,0 +1,193 @@
+:root {
+  --bg: #05070f;
+  --panel-bg: #0d1220;
+  --panel-border: #232b45;
+  --text: #d6dcf5;
+  --text-dim: #838ea6;
+  --accent: #5b9dff;
+  --accent-2: #ffb454;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--panel-border);
+  z-index: 2;
+}
+
+#brand {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent-2);
+}
+
+#topbar-info {
+  flex: 1;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+#topbar-actions button {
+  margin-left: 0.4rem;
+}
+
+button {
+  background: #171f36;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+button:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+#galaxy-canvas {
+  flex: 1;
+  display: block;
+  cursor: grab;
+}
+
+#galaxy-canvas:active {
+  cursor: grabbing;
+}
+
+#side-panel {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--panel-border);
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+#side-panel-empty {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+#system-name {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+  color: var(--accent-2);
+}
+
+#system-star {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-bottom: 0.8rem;
+}
+
+#system-planets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+#system-planets li {
+  background: #10182c;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+}
+
+.planet-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.planet-meta {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 4, 10, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.dialog-overlay[hidden] {
+  display: none;
+}
+
+.dialog {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 1.4rem 1.6rem;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.dialog h2 {
+  margin: 0 0 0.2rem;
+}
+
+.dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.dialog select,
+.dialog input {
+  background: #10182c;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
