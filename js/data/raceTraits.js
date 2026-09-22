@@ -5,8 +5,8 @@
 export const RACE_TRAITS = {
   human: { productionBonusPct: 20 },
   alkari: { maneuverBonus: 3 },
-  bulrathi: { groundCombatBonus: 20 }, // wirkt erst mit Bodeninvasion (v0.7)
-  darlok: { espionageBonus: true }, // wirkt erst mit Spionage (v0.8)
+  bulrathi: { groundCombatBonus: 20 },
+  darlok: {}, // Spionage-/Framing-Vorteile sind direkt in js/espionage.js verdrahtet (raceId === "darlok")
   klackon: { popProductionMultiplier: 2 },
   meklar: { roboticControlsBonus: 2 },
   mrrshan: { attackBonus: 4 },

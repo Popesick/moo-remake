@@ -7,10 +7,13 @@ import { modulesOfKind } from "./shipDesign.js";
 import { findFleetsAt, sendFleet } from "./fleets.js";
 import { isAtWar, setRelationStatus } from "./diplomacy.js";
 import { resolveInvasion, applyInvasionResult, maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
+import { attemptSpyAction } from "./espionage.js";
+import { SPY_ACTIONS } from "./data/espionage.js";
 import { makeRng, hashSeed } from "./rng.js";
 
 const WAR_CHECK_SCALE = 0.04; // dämpft warBias auf eine plausible Pro-Runde-Wahrscheinlichkeit
 const ERRATIC_WAR_CHANCE = 0.03;
+const ESPIONAGE_ATTEMPT_CHANCE = 0.15; // Chance pro Runde, sofern genug SP vorhanden sind
 
 export function assignAiBehavior(rng, empire) {
   empire.personalityId = PERSONALITIES[Math.floor(rng() * PERSONALITIES.length)].id;
@@ -144,10 +147,34 @@ function attemptInvasion(galaxy, empire) {
 // Führt die KI-Runde für ein einzelnes, nicht spielergesteuertes Imperium
 // aus: Wirtschaftspolitik gemäß Ziel, Kolonisierung, Diplomatie-Neigung,
 // (bei kriegerischer Persönlichkeit) Flottenangriffe und Invasionen.
+// Spioniert gelegentlich einen zufälligen Rivalen aus (Tech-Diebstahl,
+// Sabotage oder Rebellion); friedliche Persönlichkeiten (geringer warBias)
+// verzichten darauf. Framing wird nicht genutzt – das bleibt vorerst dem
+// Spieler und dem Darlok-Sondervorteil in attemptSpyAction vorbehalten.
+function attemptEspionage(galaxy, empire, seed, turn) {
+  const personality = getPersonality(empire.personalityId);
+  if (personality.warBias < 0.3) return;
+
+  const rng = makeRng(hashSeed(`${seed}:aispy:${empire.id}:${turn}`));
+  if (rng() >= ESPIONAGE_ATTEMPT_CHANCE) return;
+
+  const targets = galaxy.empires.filter((e) => e.id !== empire.id && !e.eliminated);
+  if (targets.length === 0) return;
+  const target = targets[Math.floor(rng() * targets.length)];
+
+  const actions = Object.values(SPY_ACTIONS);
+  const affordable = actions.filter((a) => (empire.espionagePoints ?? 0) >= a.cost);
+  if (affordable.length === 0) return;
+  const action = affordable[Math.floor(rng() * affordable.length)];
+
+  attemptSpyAction(galaxy, empire, target, action.id, false);
+}
+
 export function runAiTurn(galaxy, empire, seed, turn) {
   applyEconomyPolicy(galaxy, empire);
   attemptColonization(galaxy, empire);
   considerDiplomacy(galaxy, empire, seed, turn);
   attemptAggression(galaxy, empire);
   attemptInvasion(galaxy, empire);
+  attemptEspionage(galaxy, empire, seed, turn);
 }

@@ -11,6 +11,7 @@ import { getRaceTraits } from "./data/raceTraits.js";
 import { runAiTurn } from "./ai.js";
 import { isAtWar } from "./diplomacy.js";
 import { checkGameEnd } from "./victory.js";
+import { ESPIONAGE_GENERATION_RATE, DEFAULT_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import {
   BASE_BC_PER_POP,
   BASE_BC_PER_FACTORY,
@@ -69,6 +70,8 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     bioWeaponKillMillions: 0,
     bioAntidoteReduceMillions: 0,
     groundCombatMultiplier: 1 + (traits.groundCombatBonus ?? 0) / 100, // Bulrathi: +20% Bodenkampfeffektivität
+    espionagePoints: 0,
+    espionageAllocationPct: DEFAULT_ESPIONAGE_ALLOCATION_PCT,
     maneuverBonus: traits.maneuverBonus ?? 0,
     productionMultiplier: 1 + (traits.productionBonusPct ?? 0) / 100,
     popProductionMultiplier: traits.popProductionMultiplier ?? 1,
@@ -134,7 +137,7 @@ export function computePlanetProduction(planet, empire) {
 // Verschmutzung, Bevölkerungswachstum, Kolonieschiff-Ansparung, Forschung.
 export function simulateTurn(galaxy) {
   const empireById = new Map(galaxy.empires.map((e) => [e.id, e]));
-  const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, shipBC: 0, defBC: 0 }]));
+  const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, shipBC: 0, defBC: 0, totalBC: 0 }]));
   const turnForAi = galaxy.turn ?? 1;
 
   for (const empire of galaxy.empires) {
@@ -168,6 +171,7 @@ export function simulateTurn(galaxy) {
       if (delta) {
         delta.techBC += prod.bc.tech;
         delta.defBC += prod.bc.def;
+        delta.totalBC += prod.totalBC;
 
         const design = planet.productionTarget
           ? empire?.shipDesigns.find((d) => d.id === planet.productionTarget)
@@ -196,6 +200,8 @@ export function simulateTurn(galaxy) {
     if (!delta) continue;
     empire.defenseBudget += delta.defBC;
     empire.lastResearchIncome = delta.techBC;
+    empire.espionagePoints = (empire.espionagePoints ?? 0) +
+      delta.totalBC * (empire.espionageAllocationPct / 100) * ESPIONAGE_GENERATION_RATE;
 
     empire.shipProgress += delta.shipBC;
     const newShips = Math.floor(empire.shipProgress / COLONY_SHIP_COST_BC);

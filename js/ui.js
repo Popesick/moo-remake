@@ -10,6 +10,7 @@ import { costForTech, getCandidateTechs } from "./research.js";
 import { getResearchCostFactor } from "./data/raceResearch.js";
 import { isAtWar } from "./diplomacy.js";
 import { maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
+import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -585,13 +586,28 @@ export function closeBattleDialog() {
 }
 
 export function renderDiplomacyDialog(galaxy, callbacks) {
-  const container = document.getElementById("diplomacy-list");
-  container.innerHTML = "";
   const player = galaxy.empires.find((e) => e.isPlayer);
   if (!player) return;
 
+  const budgetEl = document.getElementById("espionage-budget");
+  budgetEl.innerHTML = "";
+  const budgetLabel = document.createElement("label");
+  budgetLabel.className = "design-field";
+  budgetLabel.textContent = `Spionage-Budget: ${Math.round(player.espionageAllocationPct)}% der Produktion · Vorrat: ${fmt(player.espionagePoints ?? 0, 0)} SP`;
+  const budgetInput = document.createElement("input");
+  budgetInput.type = "range";
+  budgetInput.min = "0";
+  budgetInput.max = String(MAX_ESPIONAGE_ALLOCATION_PCT);
+  budgetInput.value = String(Math.round(player.espionageAllocationPct));
+  budgetInput.addEventListener("input", () => callbacks.onEspionageAllocationChange(Number(budgetInput.value)));
+  budgetLabel.appendChild(budgetInput);
+  budgetEl.appendChild(budgetLabel);
+
+  const container = document.getElementById("diplomacy-list");
+  container.innerHTML = "";
+
   for (const empire of galaxy.empires) {
-    if (empire.id === player.id) continue;
+    if (empire.id === player.id || empire.eliminated) continue;
     const relation = callbacks.getRelation(empire.id);
     const race = getRace(empire.raceId);
 
@@ -602,15 +618,34 @@ export function renderDiplomacyDialog(galaxy, callbacks) {
     title.innerHTML = `<strong>${race?.name ?? empire.name}</strong><span>${relation.status === "war" ? "Krieg" : "Frieden"}</span>`;
     row.appendChild(title);
 
-    const btn = document.createElement("button");
+    const warBtn = document.createElement("button");
     if (relation.status === "war") {
-      btn.textContent = "Frieden anbieten";
-      btn.addEventListener("click", () => callbacks.onProposePeace(empire.id));
+      warBtn.textContent = "Frieden anbieten";
+      warBtn.addEventListener("click", () => callbacks.onProposePeace(empire.id));
     } else {
-      btn.textContent = "Krieg erklären";
-      btn.addEventListener("click", () => callbacks.onDeclareWar(empire.id));
+      warBtn.textContent = "Krieg erklären";
+      warBtn.addEventListener("click", () => callbacks.onDeclareWar(empire.id));
     }
-    row.appendChild(btn);
+    row.appendChild(warBtn);
+
+    const frameLabel = document.createElement("label");
+    frameLabel.className = "colonize-hint";
+    const frameCheckbox = document.createElement("input");
+    frameCheckbox.type = "checkbox";
+    frameLabel.appendChild(frameCheckbox);
+    frameLabel.append(" Bei Entdeckung Dritten die Schuld zuschieben (Framing)");
+    row.appendChild(frameLabel);
+
+    const spyRow = document.createElement("div");
+    spyRow.className = "fleet-actions";
+    for (const action of Object.values(SPY_ACTIONS)) {
+      const spyBtn = document.createElement("button");
+      spyBtn.textContent = `${action.name} (${action.cost} SP)`;
+      spyBtn.disabled = (player.espionagePoints ?? 0) < action.cost;
+      spyBtn.addEventListener("click", () => callbacks.onSpyAction(empire.id, action.id, frameCheckbox.checked));
+      spyRow.appendChild(spyBtn);
+    }
+    row.appendChild(spyRow);
 
     container.appendChild(row);
   }

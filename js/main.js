@@ -8,6 +8,7 @@ import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
 import { sendFleet, splitStack } from "./fleets.js";
 import { getRelation, setRelationStatus, isAtWar } from "./diplomacy.js";
 import { resolveInvasion, applyInvasionResult, applyBioAttack, maxInvasionTroops } from "./invasion.js";
+import { attemptSpyAction } from "./espionage.js";
 import { getPersonality } from "./data/aiPersonality.js";
 import {
   renderSystemPanel,
@@ -223,6 +224,22 @@ const diplomacyCallbacks = {
     }
     renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
     saveGame();
+  },
+  onEspionageAllocationChange(value) {
+    const player = getPlayerEmpire();
+    player.espionageAllocationPct = value;
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    saveGame();
+  },
+  onSpyAction(otherEmpireId, actionId, useFraming) {
+    const player = getPlayerEmpire();
+    const other = getEmpire(otherEmpireId);
+    const result = attemptSpyAction(gameState.galaxy, player, other, actionId, useFraming);
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    updateTopbarInfo(gameState.galaxy);
+    refreshSidePanel();
+    saveGame();
+    flashTopbar(result.log[result.log.length - 1]);
   },
 };
 

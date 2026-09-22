@@ -78,9 +78,29 @@ spielbar von der Kolonisierung bis zum Sieg.
   entstammen automatisch dem bevölkerungsreichsten eigenen Planeten statt
   einer frei wählbaren Quelle, KI setzt keine Biowaffen ein.
 
+- **v0.8 – Spionage & Framing**
+  Spionagepunkte (SP) werden jede Runde aus einem einstellbaren Anteil der
+  Gesamtproduktion generiert (Standard 10 %, bis 30 % einstellbar) und in
+  einem Vorrat pro Imperium gesammelt. Drei Aktionen mit festen SP-Kosten:
+  Technologie stehlen (fremde, noch nicht erforschte Technologie kopieren),
+  Industrielle Sabotage (Fabriken auf dem größten gegnerischen Planeten
+  zerstören) und Rebellion anzetteln (Fabriken und Bevölkerung durch
+  Unruhen reduzieren). Missionserfolg und Entdeckung werden getrennt
+  ausgewürfelt; bei Entdeckung kann wahlweise ein zufälliges drittes
+  Imperium beschuldigt werden (Framing) – gelingt es, erklärt der
+  Verteidiger dem Unschuldigen den Krieg statt dem wahren Angreifer.
+  Darloks erhalten dabei eine deutlich höhere Framing-Erfolgschance und
+  eine geringere Entdeckungswahrscheinlichkeit. Ein einfacher
+  Gegenspionage-Dämpfer senkt die gegnerische Missionserfolgschance mit
+  steigendem eigenen SP-Vorrat. KI-Imperien mit ausreichender Kriegsneigung
+  spionieren gelegentlich zufällige Rivalen aus, nutzen aber kein Framing.
+  *Vereinfacht:* kein Galaktischer Rat oder dedizierter
+  Gegenspionage-Dienst, Framing-Ziel ist immer zufällig statt strategisch
+  gewählt, KI verzichtet auf Framing, Spionage-Budget wirkt nur auf den
+  SP-Vorrat und nicht zusätzlich auf die reguläre Wirtschaftsproduktion.
+
 ## Weitere Post-Prototyp-Releases
 
-- v0.8 Spionage & Framing
 - v0.9 Galaktischer Rat, Handelsabkommen/Verträge & Diplomatie-Sieg
 - v0.10 Orion-System & Guardian, Miniaturisierungs-Inhalte, galaktische Zufallsereignisse
 - v0.11 Highscore/Hall-of-Fame-Formel (inkl. Guardian-/Kill-Boni)
