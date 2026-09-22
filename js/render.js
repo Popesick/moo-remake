@@ -1,5 +1,6 @@
 import { getStarType } from "./data/starTypes.js";
 import { PARSEC_PIXELS } from "./data/logistics.js";
+import { multiSourceLaneDistances } from "./starlanes.js";
 
 const STAR_RADIUS_BASE = 6;
 const SELECT_RING_COLOR = "#5b9dff";
@@ -50,27 +51,55 @@ export function centerCameraOnPoint(canvas, camera, worldX, worldY) {
   camera.y = worldY - h / 2 / camera.zoom;
 }
 
-// Zeichnet die Treibstoffreichweite (ROADMAP v0.10) als transluzente Kreise
-// um alle Kolonien des angegebenen Imperiums – aktiv während der
-// Zielwahl für eine Flottenbewegung (gameState.pendingFleetMove), damit
-// sofort sichtbar ist, welche Systeme ohne weitere Forschung erreichbar sind.
+// Sternenstraßen-Netz (ROADMAP v0.13): feste Route zwischen benachbarten
+// Systemen statt freier Bewegung im Raum, siehe js/starlanes.js. Wird immer
+// gezeichnet (nicht nur während der Zielwahl), damit die Konnektivität der
+// Galaxie durchgehend sichtbar ist.
+function renderStarlanes(ctx, camera, galaxy, w, h) {
+  if (!galaxy.starlanes || galaxy.starlanes.length === 0) return;
+  const systemsById = new Map(galaxy.systems.map((s) => [s.id, s]));
+  ctx.save();
+  ctx.strokeStyle = "rgba(120, 145, 200, 0.22)";
+  ctx.lineWidth = 1;
+  for (const lane of galaxy.starlanes) {
+    const a = systemsById.get(lane.a);
+    const b = systemsById.get(lane.b);
+    if (!a || !b) continue;
+    const pa = worldToScreen(camera, a.x, a.y);
+    const pb = worldToScreen(camera, b.x, b.y);
+    if ((pa.x < 0 || pa.x > w || pa.y < 0 || pa.y > h) && (pb.x < 0 || pb.x > w || pb.y < 0 || pb.y > h)) continue;
+    ctx.beginPath();
+    ctx.moveTo(pa.x, pa.y);
+    ctx.lineTo(pb.x, pb.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Hebt alle Systeme hervor, die über das Sternenstraßen-Netz innerhalb der
+// aktuellen Treibstoffreichweite liegen (ROADMAP v0.10/v0.13) – aktiv
+// während der Zielwahl für eine Flottenbewegung (gameState.pendingFleetMove).
+// Ein geometrischer Kreis (vor v0.13) wäre jetzt irreführend, da die
+// tatsächliche Reisedistanz dem (oft längeren) Sternenstraßen-Pfad folgt,
+// nicht der Luftlinie.
 function renderRangeOverlay(ctx, camera, galaxy, empireId, rangeParsec) {
   const ownedSystems = galaxy.systems.filter((s) => s.planets.some((p) => p.colonizedBy === empireId));
   if (ownedSystems.length === 0) return;
-  const radiusPixels = rangeParsec * PARSEC_PIXELS * camera.zoom;
+  const distances = multiSourceLaneDistances(galaxy, ownedSystems.map((s) => s.id));
+  const rangePixels = rangeParsec * PARSEC_PIXELS;
+
   ctx.save();
-  ctx.fillStyle = "rgba(91, 157, 255, 0.06)";
-  ctx.strokeStyle = "rgba(91, 157, 255, 0.4)";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
-  for (const system of ownedSystems) {
+  ctx.strokeStyle = "rgba(91, 157, 255, 0.6)";
+  ctx.lineWidth = 2;
+  for (const system of galaxy.systems) {
+    const d = distances.get(system.id);
+    if (d === undefined || d > rangePixels) continue;
     const p = worldToScreen(camera, system.x, system.y);
+    const radius = (STAR_RADIUS_BASE * Math.max(0.6, Math.min(1.6, camera.zoom))) + 8;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, radiusPixels, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.stroke();
   }
-  ctx.setLineDash([]);
   ctx.restore();
 }
 
@@ -103,6 +132,8 @@ export function render(canvas, galaxy, camera, selectedSystemId, rangeOverlay) {
     ctx.fill();
   }
   ctx.restore();
+
+  renderStarlanes(ctx, camera, galaxy, w, h);
 
   if (rangeOverlay) {
     renderRangeOverlay(ctx, camera, galaxy, rangeOverlay.empireId, rangeOverlay.rangeParsec);

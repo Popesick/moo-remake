@@ -10,9 +10,10 @@ import { resolveInvasion, applyInvasionResult, maxInvasionTroops, fleetTroopCapa
 import { attemptSpyAction } from "./espionage.js";
 import { SPY_ACTIONS } from "./data/espionage.js";
 import { makeRng, hashSeed } from "./rng.js";
-import { PARSEC_PIXELS } from "./data/logistics.js";
+import { PARSEC_PIXELS, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import { getRichness } from "./data/richness.js";
 import { getEnvironment } from "./data/environments.js";
+import { multiSourceLaneDistances } from "./starlanes.js";
 import {
   PLANET_VALUE_TIME_DECAY,
   DEVELOP_OVERHEAD_TURNS,
@@ -107,8 +108,11 @@ function planetAttractiveness(planet, empire, travelTurns) {
   return total;
 }
 
-function travelTurnsBetween(empire, systemA, systemB) {
-  const distanceParsec = Math.hypot(systemA.x - systemB.x, systemA.y - systemB.y) / PARSEC_PIXELS;
+// travelPixels ist die Sternenstraßen-Pfaddistanz (ROADMAP v0.13), nicht
+// die Luftlinie – Ziele "um die Ecke" brauchen entsprechend länger, auch
+// wenn sie geometrisch nah erscheinen.
+function travelTurnsFromPixels(empire, travelPixels) {
+  const distanceParsec = travelPixels / PARSEC_PIXELS;
   return distanceParsec / Math.max(1, empire.travelSpeedParsec ?? 1);
 }
 
@@ -138,17 +142,24 @@ function attemptColonization(galaxy, empire) {
   const ownedSystems = galaxy.systems.filter((s) => s.planets.some((p) => p.colonizedBy === empire.id));
   if (ownedSystems.length === 0) return;
 
+  // Ein Multi-Source-Dijkstra ab allen eigenen Kolonien statt eines
+  // Einzelpfads pro Kandidatenplanet (siehe js/starlanes.js).
+  const distances = multiSourceLaneDistances(galaxy, ownedSystems.map((s) => s.id));
+  const rangePixels = (empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC) * PARSEC_PIXELS;
+
   let best = null;
   let bestValue = -Infinity;
   for (const system of galaxy.systems) {
+    const travelPixels = distances.get(system.id);
+    // Sowohl unerreichbar (kein Sternenstraßen-Pfad) als auch außerhalb der
+    // Treibstoffreichweite ausschließen – sonst würde die KI wertvolle,
+    // aber unerreichbare Planeten anvisieren und colonizePlanet() lehnt sie
+    // dann stillschweigend ab (Kolonieschiffe stauen sich nutzlos an).
+    if (travelPixels === undefined || travelPixels > rangePixels) continue;
     for (const planet of system.planets) {
       if (planet.isOrion) continue;
       if (!isColonizable(planet, empire)) continue;
-      const nearestOwned = ownedSystems.reduce((closest, s) => {
-        const dist = Math.hypot(s.x - system.x, s.y - system.y);
-        return dist < closest.dist ? { system: s, dist } : closest;
-      }, { system: null, dist: Infinity });
-      const travelTurns = travelTurnsBetween(empire, nearestOwned.system, system);
+      const travelTurns = travelTurnsFromPixels(empire, travelPixels);
       const value = planetAttractiveness(planet, empire, travelTurns);
       if (value > bestValue) {
         bestValue = value;
@@ -192,12 +203,16 @@ function attemptAggression(galaxy, empire) {
   if (!strongFleet) return;
 
   const atWarIds = new Set(atWarWith.map((e) => e.id));
+  const distances = multiSourceLaneDistances(galaxy, [homeSystem.id]);
+  const rangePixels = (empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC) * PARSEC_PIXELS;
   let best = null;
   let bestValue = -Infinity;
   for (const system of galaxy.systems) {
+    const travelPixels = distances.get(system.id);
+    if (travelPixels === undefined || travelPixels > rangePixels) continue;
     for (const planet of system.planets) {
       if (!atWarIds.has(planet.colonizedBy)) continue;
-      const travelTurns = travelTurnsBetween(empire, homeSystem, system);
+      const travelTurns = travelTurnsFromPixels(empire, travelPixels);
       const value = planetAttractiveness(planet, empire, travelTurns);
       if (value > bestValue) {
         bestValue = value;

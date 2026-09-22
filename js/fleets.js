@@ -1,4 +1,5 @@
 import { PARSEC_PIXELS, DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
+import { findPath, laneDistance } from "./starlanes.js";
 
 function nextFleetId(galaxy) {
   galaxy.nextFleetId = (galaxy.nextFleetId ?? 1) + 1;
@@ -29,10 +30,11 @@ function fleetShipCount(fleet) {
   return fleet.stacks.reduce((sum, s) => sum + s.count, 0);
 }
 
-// Treibstoffreichweite (ROADMAP v0.10): ein Ziel ist erreichbar, wenn es
-// innerhalb von empire.travelRangeParsec um irgendeine eigene Kolonie liegt
-// (Kreisradius-Union, siehe js/data/logistics.js). Reisen zwischen zwei
-// eigenen Systemen ist davon unabhängig immer uneingeschränkt möglich.
+// Treibstoffreichweite (ROADMAP v0.10, seit v0.13 entlang der
+// Sternenstraßen statt Luftlinie): ein Ziel ist erreichbar, wenn der
+// kürzeste Sternenstraßen-Pfad ab irgendeiner eigenen Kolonie innerhalb von
+// empire.travelRangeParsec liegt. Reisen zwischen zwei eigenen Systemen ist
+// davon unabhängig immer uneingeschränkt möglich.
 export function isSystemInRange(galaxy, empire, targetSystem) {
   if (!empire) return true;
   const destOwnedByEmpire = targetSystem.planets.some((p) => p.colonizedBy === empire.id);
@@ -40,9 +42,29 @@ export function isSystemInRange(galaxy, empire, targetSystem) {
   const ownedSystems = galaxy.systems.filter((s) => s.planets.some((p) => p.colonizedBy === empire.id));
   if (ownedSystems.length === 0) return true;
   const range = empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC;
-  return ownedSystems.some((s) => Math.hypot(s.x - targetSystem.x, s.y - targetSystem.y) / PARSEC_PIXELS <= range);
+  return ownedSystems.some((s) => {
+    const pathDist = laneDistance(galaxy, s.id, targetSystem.id);
+    return pathDist !== null && pathDist / PARSEC_PIXELS <= range;
+  });
 }
 
+// Setzt eine einzelne Etappe einer mehrstufigen Sternenstraßen-Reise auf.
+function beginLeg(fleet, empire, fromSystem, toSystem) {
+  const distance = Math.hypot(toSystem.x - fromSystem.x, toSystem.y - fromSystem.y);
+  const speed = Math.max(1, empire?.travelSpeedParsec ?? DEFAULT_TRAVEL_SPEED) * PARSEC_PIXELS;
+  fleet.originSystemId = fromSystem.id;
+  fleet.destinationSystemId = toSystem.id;
+  fleet.travelRemaining = distance;
+  fleet.travelSpeed = speed;
+  fleet.travelTotal = distance;
+}
+
+// Schickt eine Flotte entlang des kürzesten Sternenstraßen-Pfads zum Ziel
+// (ROADMAP v0.13: Flotten reisen nicht mehr frei im Raum, sondern folgen
+// dem bei der Galaxie-Generierung erzeugten Sternenstraßen-Netz,
+// js/starlanes.js). Die Reise läuft automatisch über mehrere Etappen
+// (Zwischenankünfte lösen keine Benachrichtigung/Stopp aus), bis das
+// eigentliche Ziel erreicht ist.
 export function sendFleet(galaxy, fleetId, destinationSystemId) {
   const fleet = galaxy.fleets.find((f) => f.id === fleetId);
   if (!fleet) return { ok: false, reason: "Flotte nicht gefunden." };
@@ -58,29 +80,33 @@ export function sendFleet(galaxy, fleetId, destinationSystemId) {
     return { ok: false, reason: `Ziel außerhalb der Treibstoffreichweite (${range} Parsec ab eigenen Kolonien).` };
   }
 
-  const distance = Math.hypot(destination.x - origin.x, destination.y - origin.y);
-  const speed = Math.max(1, empire?.travelSpeedParsec ?? DEFAULT_TRAVEL_SPEED) * PARSEC_PIXELS;
-  fleet.destinationSystemId = destinationSystemId;
-  fleet.originSystemId = fleet.systemId;
-  fleet.travelRemaining = distance;
-  fleet.travelSpeed = speed;
-  fleet.travelTotal = distance;
+  const path = findPath(galaxy, origin.id, destination.id);
+  if (!path || path.length < 2) {
+    return { ok: false, reason: "Keine Sternenstraßen-Route zum Ziel gefunden." };
+  }
+
+  const systemsById = new Map(galaxy.systems.map((s) => [s.id, s]));
+  beginLeg(fleet, empire, origin, systemsById.get(path[1]));
+  fleet.finalDestinationSystemId = destination.id;
+  fleet.remainingPath = path.slice(2);
   return { ok: true };
 }
 
 // Ruft eine bereits unterwegs befindliche Flotte zurück (ROADMAP v0.12,
 // KI-Verteidigungspriorisierung aus "MoO KI Verhalten.docx": "Im Kriegsfall
 // konzentriert sich die KI immer zuerst auf den Schutz der eigenen
-// Planeten"). *Vereinfacht:* die Flotte springt sofort an ihr
-// Ursprungssystem zurück statt die Restdistanz zum alten Ziel korrekt in
-// eine neue Route umzurechnen – dieses Remake modelliert keine echten
-// Schiffspositionen entlang der Flugbahn, nur einen linearen Fortschritt.
+// Planeten"). *Vereinfacht:* die Flotte springt sofort an das
+// Ursprungssystem der AKTUELLEN Etappe zurück (nicht an den allerersten
+// Startpunkt der gesamten Reise) statt die Restdistanz korrekt in eine neue
+// Route umzurechnen.
 export function recallFleet(galaxy, fleetId) {
   const fleet = galaxy.fleets.find((f) => f.id === fleetId);
   if (!fleet || !fleet.destinationSystemId) return { ok: false, reason: "Flotte ist nicht unterwegs." };
   fleet.systemId = fleet.originSystemId ?? fleet.systemId;
   fleet.destinationSystemId = null;
   fleet.originSystemId = null;
+  fleet.finalDestinationSystemId = null;
+  fleet.remainingPath = null;
   fleet.travelRemaining = 0;
   fleet.travelSpeed = undefined;
   fleet.travelTotal = undefined;
@@ -109,23 +135,43 @@ export function splitStack(galaxy, fleetId, designId, splitCount) {
   return { ok: true, fleet: newFleet };
 }
 
-// Bewegt alle unterwegs befindlichen Flotten um ihre Rundengeschwindigkeit;
-// löscht leere Flotten und markiert Ankünfte.
+// Bewegt alle unterwegs befindlichen Flotten um ihre Rundengeschwindigkeit
+// entlang ihres Sternenstraßen-Pfads (ROADMAP v0.13); eine schnelle Flotte
+// mit kurzen Etappen kann so mehrere Zwischensysteme in einer Runde
+// passieren (übrig gebliebenes Bewegungsbudget wird in die nächste Etappe
+// übertragen). Zwischenankünfte lösen keine Ankunfts-Benachrichtigung aus,
+// nur das endgültige Ziel; löscht leere Flotten.
 export function advanceFleets(galaxy) {
   const arrivals = [];
+  const systemsById = new Map(galaxy.systems.map((s) => [s.id, s]));
+
   for (const fleet of galaxy.fleets) {
     if (!fleet.destinationSystemId) continue;
+    const empire = galaxy.empires.find((e) => e.id === fleet.ownerEmpireId);
     fleet.travelRemaining -= fleet.travelSpeed;
-    if (fleet.travelRemaining <= 0) {
+
+    while (fleet.travelRemaining <= 0 && fleet.destinationSystemId) {
+      const overshoot = -fleet.travelRemaining;
       fleet.systemId = fleet.destinationSystemId;
-      fleet.destinationSystemId = null;
-      fleet.originSystemId = null;
-      fleet.travelRemaining = 0;
-      fleet.travelSpeed = undefined;
-      fleet.travelTotal = undefined;
-      arrivals.push(fleet);
+
+      if (fleet.remainingPath && fleet.remainingPath.length > 0) {
+        const [nextHopId, ...rest] = fleet.remainingPath;
+        beginLeg(fleet, empire, systemsById.get(fleet.systemId), systemsById.get(nextHopId));
+        fleet.remainingPath = rest;
+        fleet.travelRemaining -= overshoot;
+      } else {
+        fleet.destinationSystemId = null;
+        fleet.originSystemId = null;
+        fleet.finalDestinationSystemId = null;
+        fleet.remainingPath = null;
+        fleet.travelRemaining = 0;
+        fleet.travelSpeed = undefined;
+        fleet.travelTotal = undefined;
+        arrivals.push(fleet);
+      }
     }
   }
+
   galaxy.fleets = galaxy.fleets.filter((f) => fleetShipCount(f) > 0);
   return arrivals;
 }

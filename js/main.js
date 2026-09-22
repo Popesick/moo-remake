@@ -103,7 +103,7 @@ const panelCallbacks = {
   },
   onArmFleetMove(fleetId) {
     gameState.pendingFleetMove = fleetId;
-    flashTopbar("Zielsystem auf der Karte anklicken … (Treibstoffreichweite als Kreis markiert)");
+    flashTopbar("Zielsystem auf der Karte anklicken … (erreichbare Systeme markiert)");
     requestRender();
   },
   onInvade(systemId, planetId, troopsRequested) {

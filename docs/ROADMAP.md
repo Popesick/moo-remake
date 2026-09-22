@@ -243,6 +243,49 @@ spielbar von der Kolonisierung bis zum Sieg.
     untereinander, keine Vorab-Prüfung der eigenen/gegnerischen
     Kampfkraft vor einem Angriff.
 
+- **v0.13 – Sternenstraßen & Flottensystem-Überarbeitung**
+  Setzt den vom Nutzer nachgereichten Teil der ursprünglichen
+  Reise-Anforderungen um ("Jeder Planet ist sofort von überall erreichbar.
+  Planeten müssen durch Reiserouten/Starlanes verbunden sein"): Flotten
+  bewegen sich nicht mehr frei im leeren Raum, sondern folgen einem festen
+  Sternenstraßen-Netz (`js/starlanes.js`), das bei der Galaxie-Generierung
+  einmalig erzeugt wird (Minimum Spanning Tree für garantierte
+  Zusammenhängigkeit, plus die beiden nächstgelegenen Nachbarn jedes
+  Systems für Routenalternativen und Zyklen statt einer reinen
+  Baumstruktur) und für die gesamte Partie fix bleibt. Das Netz wird
+  durchgehend als feines Liniengeflecht auf der Karte dargestellt.
+
+  `sendFleet` berechnet den kürzesten Sternenstraßen-Pfad (Dijkstra) zum
+  Ziel und lässt die Flotte automatisch über mehrere Etappen reisen –
+  Zwischenankünfte lösen keine Benachrichtigung aus, nur das eigentliche
+  Ziel; übrig gebliebenes Bewegungsbudget einer Runde wird sofort in die
+  nächste Etappe übertragen, sodass schnelle Flotten mehrere kurze Etappen
+  pro Runde zurücklegen können. Die Treibstoffreichweite (v0.9.1/v0.10)
+  misst jetzt die Pfaddistanz entlang der Sternenstraßen statt der
+  Luftlinie – ein geometrisch naher, aber nicht direkt angebundener
+  Planet kann dadurch weiter entfernt sein als vorher. Die
+  Reichweiten-Anzeige beim Verlegen einer Flotte hebt deshalb einzelne
+  erreichbare Systeme hervor statt eines (jetzt irreführenden)
+  geometrischen Kreises. Die KI-Zielbewertung (v0.12) nutzt für Kolonisierung
+  und Angriffe ebenfalls Pfad- statt Luftliniendistanz (ein einziger
+  Multi-Source-Dijkstra pro Zug statt eines Pfads pro Kandidat).
+
+  Dabei einen Fehler gefunden und behoben: Die KI-Zielauswahl filterte
+  Kandidaten nur nach "über Sternenstraßen erreichbar", nicht nach der
+  tatsächlichen Treibstoffreichweite – sie wählte dadurch systematisch den
+  wertvollsten Planeten IRGENDWO im (jetzt weit verzweigten) Netz, den
+  `colonizePlanet`/`sendFleet` wegen Reichweitenüberschreitung
+  anschließend stillschweigend ablehnten. KI-Imperien stauten dadurch
+  Kolonieschiffe ungenutzt an, statt zu expandieren.
+
+  Neue Funktion `recallFleet` (siehe v0.12) springt beim Rückruf an das
+  Ursprungssystem der AKTUELLEN Etappe zurück statt an den allerersten
+  Startpunkt der gesamten Reise. *Vereinfacht:* Sternenstraßen sind
+  ungerichtet und haben keine Kapazitätsbeschränkung; kein
+  Ausrüstungsmodul für "Erweiterte Treibstofftanks" (aus der
+  Nutzer-Recherche zur MoO2-Reichweitenmechanik) – nur die
+  Fuel-Cell-Forschung (v0.9.1) erhöht die Reichweite.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign
