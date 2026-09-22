@@ -1,4 +1,7 @@
 const STORAGE_KEY = "moo-remake:savegame";
+// Erhöhen, sobald sich die Galaxie-/Spielstand-Struktur inkompatibel ändert
+// (Prototyp-Phase: keine Migration, ältere Stände werden dann verworfen).
+const SAVE_VERSION = 2;
 
 export const gameState = {
   galaxy: null,
@@ -9,7 +12,7 @@ export const gameState = {
 export function saveGame() {
   if (!gameState.galaxy) return false;
   const payload = {
-    version: 1,
+    version: SAVE_VERSION,
     savedAt: Date.now(),
     galaxy: gameState.galaxy,
     camera: gameState.camera,
@@ -23,6 +26,11 @@ export function loadGame() {
   if (!raw) return false;
   try {
     const payload = JSON.parse(raw);
+    if (payload.version !== SAVE_VERSION) {
+      console.warn("Inkompatibler Speicherstand (Version) – wird verworfen.");
+      localStorage.removeItem(STORAGE_KEY);
+      return false;
+    }
     gameState.galaxy = payload.galaxy;
     gameState.camera = payload.camera ?? { x: 0, y: 0, zoom: 1 };
     gameState.selectedSystemId = null;

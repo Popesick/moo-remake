@@ -3,6 +3,8 @@ import { STAR_TYPE_WEIGHTS } from "./data/starTypes.js";
 import { ENVIRONMENT_WEIGHTS, getEnvironment } from "./data/environments.js";
 import { RICHNESS_WEIGHTS } from "./data/richness.js";
 import { PLANET_SIZE_WEIGHTS } from "./data/planetSizes.js";
+import { RACES } from "./data/races.js";
+import { initEmpireEconomy, initColony } from "./economy.js";
 
 export const GALAXY_SIZES = {
   small: { label: "Klein (Small)", systems: 24, width: 2200, height: 1500 },
@@ -121,7 +123,8 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed } = {}
     return system;
   });
 
-  assignHomeworlds(rng, systems, empireCount);
+  const empires = generateEmpires(rng, empireCount);
+  assignHomeworlds(rng, systems, empires);
 
   return {
     seed: numericSeed,
@@ -129,15 +132,44 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed } = {}
     width: sizeCfg.width,
     height: sizeCfg.height,
     empireCount,
+    empires,
+    turn: 1,
     systems,
     createdAt: Date.now(),
   };
 }
 
+// Empire 0 ist immer der Spieler und spielt die Menschen; die KI-Imperien
+// (aktiv erst ab v0.6) erhalten eine zufällige Auswahl der übrigen
+// Fraktionen ohne Wiederholung.
+function generateEmpires(rng, empireCount) {
+  const aiRaces = RACES.filter((r) => r.id !== "human");
+  for (let i = aiRaces.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [aiRaces[i], aiRaces[j]] = [aiRaces[j], aiRaces[i]];
+  }
+
+  const empires = [];
+  for (let e = 0; e < empireCount; e++) {
+    const race = e === 0 ? RACES[0] : aiRaces[(e - 1) % aiRaces.length];
+    empires.push(
+      initEmpireEconomy({
+        id: e,
+        name: race.name,
+        raceId: race.id,
+        color: race.color,
+        isPlayer: e === 0,
+      })
+    );
+  }
+  return empires;
+}
+
 // Wählt für jedes Imperium ein Startsystem mit garantiert kolonisierbarer
 // Terranisch/Ozean- oder Gaia-Heimatwelt und ausreichendem Abstand zu den
 // anderen Startsystemen (nur Platzierung – Wirtschaft folgt in v0.2).
-function assignHomeworlds(rng, systems, empireCount) {
+function assignHomeworlds(rng, systems, empires) {
+  const empireCount = empires.length;
   const candidates = systems.filter((s) =>
     s.planets.some((p) => p.environment === "terran" || p.environment === "gaia")
   );
@@ -177,6 +209,8 @@ function assignHomeworlds(rng, systems, empireCount) {
     system.isHomeworld = true;
     system.homeworldEmpireId = e;
     homeworld.isHomeworld = true;
+    homeworld.colonizedBy = e;
+    initColony(homeworld, { isHomeworld: true });
   }
 }
 

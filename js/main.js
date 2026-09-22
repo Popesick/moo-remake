@@ -1,6 +1,8 @@
-import { generateGalaxy } from "./galaxyGen.js";
+import { generateGalaxy, findSystem } from "./galaxyGen.js";
 import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
 import { render, pickSystemAt, fitGalaxyToView } from "./render.js";
+import { simulateTurn, colonizePlanet, computePlanetProduction } from "./economy.js";
+import { normalizeSliders } from "./data/economy.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
@@ -11,13 +13,42 @@ import {
 
 const canvas = document.getElementById("galaxy-canvas");
 
+const panelCallbacks = {
+  onSliderChange(systemId, planetId, key, value) {
+    const system = findSystem(gameState.galaxy, systemId);
+    const planet = system?.planets.find((p) => p.id === planetId);
+    if (!planet) return;
+    planet.sliders[key] = value;
+    planet.sliders = normalizeSliders(planet.sliders);
+    planet.lastProduction = computePlanetProduction(planet);
+    refreshSidePanel();
+  },
+  onColonize(systemId, planetId) {
+    const playerEmpire = gameState.galaxy.empires.find((e) => e.isPlayer);
+    const result = colonizePlanet(gameState.galaxy, systemId, planetId, playerEmpire.id);
+    if (!result.ok) {
+      flashTopbar(result.reason);
+      return;
+    }
+    updateTopbarInfo(gameState.galaxy);
+    refreshSidePanel();
+    requestRender();
+    saveGame();
+  },
+};
+
 function requestRender() {
   render(canvas, gameState.galaxy, gameState.camera, gameState.selectedSystemId);
 }
 
+function refreshSidePanel() {
+  const system = gameState.selectedSystemId ? findSystem(gameState.galaxy, gameState.selectedSystemId) : null;
+  renderSystemPanel(system, gameState.galaxy, panelCallbacks);
+}
+
 function selectSystem(system) {
   gameState.selectedSystemId = system ? system.id : null;
-  renderSystemPanel(system);
+  refreshSidePanel();
   requestRender();
 }
 
@@ -27,7 +58,16 @@ function startNewGalaxy({ sizeId, empireCount, seed }) {
   gameState.selectedSystemId = null;
   gameState.camera = fitGalaxyToView(canvas, galaxy);
   updateTopbarInfo(galaxy);
-  renderSystemPanel(null);
+  refreshSidePanel();
+  requestRender();
+  saveGame();
+}
+
+function endTurn() {
+  if (!gameState.galaxy) return;
+  simulateTurn(gameState.galaxy);
+  updateTopbarInfo(gameState.galaxy);
+  refreshSidePanel();
   requestRender();
   saveGame();
 }
@@ -104,6 +144,8 @@ function setupDialogAndButtons() {
     startNewGalaxy(form);
   });
 
+  document.getElementById("btn-end-turn").addEventListener("click", endTurn);
+
   document.getElementById("btn-save").addEventListener("click", () => {
     const ok = saveGame();
     flashTopbar(ok ? "Gespeichert." : "Keine Galaxie zum Speichern.");
@@ -113,7 +155,7 @@ function setupDialogAndButtons() {
     const ok = loadGame();
     if (ok) {
       updateTopbarInfo(gameState.galaxy);
-      renderSystemPanel(null);
+      refreshSidePanel();
       requestRender();
     } else {
       flashTopbar("Kein Speicherstand gefunden.");
@@ -124,12 +166,11 @@ function setupDialogAndButtons() {
 let flashTimeout = null;
 function flashTopbar(message) {
   const el = document.getElementById("topbar-info");
-  const previous = el.textContent;
   el.textContent = message;
   clearTimeout(flashTimeout);
   flashTimeout = setTimeout(() => {
     updateTopbarInfo(gameState.galaxy);
-  }, 2000);
+  }, 2500);
 }
 
 function init() {
@@ -141,7 +182,7 @@ function init() {
       gameState.camera = fitGalaxyToView(canvas, gameState.galaxy);
     }
     updateTopbarInfo(gameState.galaxy);
-    renderSystemPanel(null);
+    refreshSidePanel();
     requestRender();
   } else {
     startNewGalaxy({ sizeId: "medium", empireCount: 3, seed: "" });

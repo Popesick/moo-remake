@@ -77,9 +77,11 @@ export function render(canvas, galaxy, camera, selectedSystemId) {
     const star = getStarType(system.star);
     const radius = STAR_RADIUS_BASE * Math.max(0.6, Math.min(1.6, camera.zoom));
 
-    if (system.isHomeworld) {
-      ctx.strokeStyle = HOME_RING_COLOR;
-      ctx.lineWidth = 2;
+    const ownerId = system.planets.find((p) => p.colonizedBy !== null && p.colonizedBy !== undefined)?.colonizedBy;
+    if (ownerId !== undefined) {
+      const owner = galaxy.empires?.find((e) => e.id === ownerId);
+      ctx.strokeStyle = owner ? owner.color : HOME_RING_COLOR;
+      ctx.lineWidth = system.isHomeworld ? 2.5 : 1.5;
       ctx.beginPath();
       ctx.arc(p.x, p.y, radius + 6, 0, Math.PI * 2);
       ctx.stroke();
