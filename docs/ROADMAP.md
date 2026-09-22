@@ -2,9 +2,11 @@
 
 Ziel: Ein im Browser lauffähiges 4X-Strategiespiel, das sich mechanisch eng an
 Master of Orion (1993) anlehnt. Grundlage sind die Analysen in
-[`design-analyse.docx`](design-analyse.docx) (Gesamtübersicht) und
+[`design-analyse.docx`](design-analyse.docx) (Gesamtübersicht),
 [`techtree-analyse.docx`](techtree-analyse.docx) (vollständiger Technologiebaum
-mit Kosten-/Durchbruchsformeln, siehe `js/data/techTree.js`). Umfang für den ersten
+mit Kosten-/Durchbruchsformeln, siehe `js/data/techTree.js`) und
+[`shipklassen-analyse.docx`](shipklassen-analyse.docx) (Rumpf-HP/Ausweichboni,
+siehe `js/data/hulls.js`). Umfang für den ersten
 spielbaren Prototyp: **Standard 4X-Kern** – vollständige Partie gegen KI,
 gewinnbar durch Elimination oder Punktzahl. Diplomatie, Spionage,
 Bodeninvasion, Galaktischer Rat und Orion-Wächter folgen erst nach dem

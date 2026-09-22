@@ -455,3 +455,46 @@ export function readNewGameForm() {
     seed: document.getElementById("ng-seed").value.trim(),
   };
 }
+
+export function renderBattleReports(reports, galaxy) {
+  const container = document.getElementById("battle-report");
+  container.innerHTML = "";
+  for (const report of reports) {
+    const system = galaxy.systems.find((s) => s.id === report.systemId);
+    const box = document.createElement("div");
+    box.className = "design-row";
+
+    const title = document.createElement("div");
+    title.className = "design-row-head";
+    const winnerRace = report.winnerEmpireId !== null
+      ? getRace(galaxy.empires.find((e) => e.id === report.winnerEmpireId)?.raceId)?.name
+      : null;
+    title.innerHTML = `<strong>${system?.name ?? "Unbekanntes System"}</strong><span>${winnerRace ? `Sieg: ${winnerRace}` : "Unentschieden"}</span>`;
+    box.appendChild(title);
+
+    const lossLine = document.createElement("div");
+    lossLine.className = "design-row-stats";
+    lossLine.textContent = Object.entries(report.shipsLostByEmpire)
+      .map(([empireId, lost]) => {
+        const race = getRace(galaxy.empires.find((e) => e.id === Number(empireId))?.raceId);
+        return `${race?.name ?? empireId}: ${lost} Schiff(e) verloren`;
+      })
+      .join(" · ");
+    box.appendChild(lossLine);
+
+    const log = document.createElement("div");
+    log.className = "battle-log";
+    log.textContent = report.log.length > 0 ? report.log.join("\n") : "Keine Schiffe zerstört.";
+    box.appendChild(log);
+
+    container.appendChild(box);
+  }
+}
+
+export function openBattleDialog() {
+  document.getElementById("battle-dialog").hidden = false;
+}
+
+export function closeBattleDialog() {
+  document.getElementById("battle-dialog").hidden = true;
+}

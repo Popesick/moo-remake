@@ -167,6 +167,12 @@ export function applyTechEffect(empire, tech) {
     case "travelSpeed":
       empire.travelSpeedParsec = Math.max(empire.travelSpeedParsec ?? 1, effect.value);
       break;
+    case "attackBonus":
+      empire.attackBonus = Math.max(empire.attackBonus ?? 0, effect.value);
+      break;
+    case "ecmBonus":
+      empire.ecmDefense = Math.max(empire.ecmDefense ?? 0, effect.value);
+      break;
     case "flavor":
     default:
       break; // wartet auf Schiffsdesign/Kampf/Bodeninvasion (v0.4/v0.5/v0.7)

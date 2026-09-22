@@ -84,6 +84,7 @@ export function computeDesignStats(design) {
     hp: Math.round(hull.baseHP * (armor?.module.hpMultiplier ?? 1)),
     shieldAbsorption: shield?.module.absorption ?? 0,
     speed: drive?.module.speed ?? 1,
+    hullEvasionBonus: hull.evasionBonus,
     weaponLines,
     overCapacity: spaceUsed > hull.space,
   };

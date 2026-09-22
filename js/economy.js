@@ -5,6 +5,7 @@ import { getDifficulty } from "./data/difficulty.js";
 import { initEmpireResearch, processResearchTurn, applyTechEffect } from "./research.js";
 import { computeDesignStats } from "./shipDesign.js";
 import { addShipsToSystem, advanceFleets } from "./fleets.js";
+import { resolveSystemCombat } from "./combat.js";
 import { DEFAULT_TRAVEL_SPEED } from "./data/logistics.js";
 import {
   BASE_BC_PER_POP,
@@ -55,6 +56,8 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     lastResearchIncome: 0,
     travelSpeedParsec: DEFAULT_TRAVEL_SPEED,
     shipDesigns: [],
+    attackBonus: 0,
+    ecmDefense: 0,
   };
   const { research, initialBreakthroughs } = initEmpireResearch(seed, empire.id, empire.raceId);
   base.research = research;
@@ -178,9 +181,46 @@ export function simulateTurn(galaxy) {
   }
 
   const arrivals = advanceFleets(galaxy);
+  const battleReports = resolveAllCombats(galaxy);
 
   galaxy.turn = turn + 1;
-  return { breakthroughsByEmpire, arrivals };
+  return { breakthroughsByEmpire, arrivals, battleReports };
+}
+
+// Löst an jedem System, an dem stationäre Flotten mehrerer Imperien
+// aufeinandertreffen, ein automatisches Gefecht aus (siehe js/combat.js) und
+// baut die beteiligten Flotten anschließend aus den Überlebenden neu auf.
+function resolveAllCombats(galaxy) {
+  const reports = [];
+  const systemIds = new Set(
+    galaxy.fleets.filter((f) => !f.destinationSystemId).map((f) => f.systemId)
+  );
+
+  for (const systemId of systemIds) {
+    const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
+    const empireIds = new Set(fleetsHere.map((f) => f.ownerEmpireId));
+    if (empireIds.size < 2) continue;
+
+    const result = resolveSystemCombat(fleetsHere, galaxy.empires);
+    if (!result) continue;
+
+    galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === systemId && !f.destinationSystemId));
+
+    for (const [empireId, stacks] of result.survivorsByEmpire) {
+      if (stacks.length === 0) continue;
+      galaxy.fleets.push({
+        id: `fleet-${galaxy.nextFleetId++}`,
+        ownerEmpireId: empireId,
+        systemId,
+        destinationSystemId: null,
+        stacks,
+      });
+    }
+
+    reports.push({ systemId, ...result });
+  }
+
+  return reports;
 }
 
 export function colonizePlanet(galaxy, systemId, planetId, empireId) {

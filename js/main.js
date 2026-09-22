@@ -15,6 +15,9 @@ import {
   openResearchDialog,
   closeResearchDialog,
   renderResearchDialog,
+  renderBattleReports,
+  openBattleDialog,
+  closeBattleDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -138,13 +141,21 @@ const shipDesignCallbacks = {
 
 function endTurn() {
   if (!gameState.galaxy) return;
-  const { breakthroughsByEmpire, arrivals } = simulateTurn(gameState.galaxy);
+  const { breakthroughsByEmpire, arrivals, battleReports } = simulateTurn(gameState.galaxy);
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
   requestRender();
   saveGame();
 
   const playerEmpire = getPlayerEmpire();
+
+  const playerBattles = battleReports.filter((r) => r.empireIds.includes(playerEmpire.id));
+  if (playerBattles.length > 0) {
+    renderBattleReports(playerBattles, gameState.galaxy);
+    openBattleDialog();
+    return;
+  }
+
   const playerBreakthroughs = breakthroughsByEmpire.get(playerEmpire.id);
   if (playerBreakthroughs?.length) {
     flashTopbar(`Durchbruch: ${playerBreakthroughs.map((t) => t.name).join(", ")}`);
@@ -264,6 +275,8 @@ function setupDialogAndButtons() {
     openShipDesignDialog();
   });
   document.getElementById("shipdesign-close").addEventListener("click", closeShipDesignDialog);
+
+  document.getElementById("battle-close").addEventListener("click", closeBattleDialog);
 
   document.getElementById("btn-save").addEventListener("click", () => {
     const ok = saveGame();
