@@ -10,7 +10,8 @@ import { costForTech, getCandidateTechs } from "./research.js";
 import { getResearchCostFactor } from "./data/raceResearch.js";
 import { isAtWar, getTradeAgreement, computeTradeBonusBC } from "./diplomacy.js";
 import { maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
-import { isSystemInRange } from "./fleets.js";
+import { isSystemInRange, findColonyShipFleetAt, countColonyShips, estimateFleetEta } from "./fleets.js";
+import { COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import { COUNCIL_MAJORITY_RATIO } from "./data/diplomacyOptions.js";
 import { DEFAULT_TRAVEL_RANGE_PARSEC, UNLIMITED_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
@@ -271,14 +272,17 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callba
   note.textContent = env.note;
   li.appendChild(note);
 
-  const inRange = isSystemInRange(galaxy, playerEmpire, system);
   const guarded = isOrionGuarded(galaxy, system.id);
+  const techOk = isColonizable(planet, playerEmpire);
+  // Kolonisierung erfordert ein physisch anwesendes Kolonieschiff (ROADMAP
+  // v0.14) statt einer bloßen Reichweitenprüfung – siehe js/economy.js
+  // colonizePlanet.
+  const colonyFleet = findColonyShipFleetAt(galaxy, playerEmpire.id, system.id);
 
-  if (isColonizable(planet, playerEmpire) && inRange && !guarded) {
+  if (techOk && !guarded && colonyFleet) {
     const btn = document.createElement("button");
     btn.className = "btn-colonize";
-    btn.textContent = `Kolonisieren (${playerEmpire.colonyShips} Kolonieschiff${playerEmpire.colonyShips === 1 ? "" : "e"} verfügbar)`;
-    btn.disabled = playerEmpire.colonyShips < 1;
+    btn.textContent = "Kolonisieren";
     btn.addEventListener("click", () => callbacks.onColonize(system.id, planet.id));
     li.appendChild(btn);
   } else {
@@ -286,12 +290,14 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callba
     hint.className = "colonize-hint";
     if (guarded) {
       hint.textContent = "Bewacht vom Guardian of Orion – erst eine Kampfflotte hierher schicken und den Wächter besiegen.";
-    } else if (!inRange) {
-      hint.textContent = `Außerhalb der Treibstoffreichweite (${playerEmpire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC} Parsec ab eigenen Kolonien) – weitere Fuel-Cell-Forschung nötig.`;
-    } else {
+    } else if (!techOk) {
       hint.textContent = env.techReq > 0
         ? `Erfordert eine Planetologie-Technologie auf Stufe ${env.techReq} (siehe Forschungsdialog).`
         : "Noch nicht kolonisierbar.";
+    } else if (!isSystemInRange(galaxy, playerEmpire, system)) {
+      hint.textContent = `Außerhalb der Treibstoffreichweite (${playerEmpire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC} Parsec ab eigenen Kolonien) – weitere Fuel-Cell-Forschung nötig, um ein Kolonieschiff herzuschicken.`;
+    } else {
+      hint.textContent = "Kein Kolonieschiff an diesem System stationiert – eines hierher verlegen.";
     }
     li.appendChild(hint);
   }
@@ -348,6 +354,16 @@ export function renderSystemPanel(system, galaxy, callbacks) {
   renderFleetSection(system, galaxy, playerEmpire, callbacks);
 }
 
+// Kolonieschiffe (ROADMAP v0.14) sind kein Eintrag in
+// playerEmpire.shipDesigns (kein spielerdefiniertes Design, siehe
+// js/data/economy.js COLONY_SHIP_DESIGN_ID) und brauchen daher einen
+// eigenen Anzeigenamen statt "Unbekanntes Design".
+function stackDisplayName(stack, empire) {
+  if (stack.designId === COLONY_SHIP_DESIGN_ID) return "Kolonieschiff";
+  const design = empire.shipDesigns.find((d) => d.id === stack.designId);
+  return design?.name ?? "Unbekanntes Design";
+}
+
 function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
   const container = document.getElementById("system-fleets");
   container.innerHTML = "";
@@ -370,6 +386,15 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
   heading.style.fontSize = "0.95rem";
   section.appendChild(heading);
 
+  // Mehrere eigene, stationäre Flotten am selben System zusammenlegen
+  // (ROADMAP v0.14, Flottenverwaltung).
+  if (stationary.length > 1) {
+    const mergeBtn = document.createElement("button");
+    mergeBtn.textContent = `Alle ${stationary.length} Flotten hier zusammenlegen`;
+    mergeBtn.addEventListener("click", () => callbacks.onMergeFleets(stationary.map((f) => f.id)));
+    section.appendChild(mergeBtn);
+  }
+
   for (const fleet of stationary) {
     const card = document.createElement("div");
     card.className = "fleet-card";
@@ -378,10 +403,10 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
     card.appendChild(title);
 
     for (const stack of fleet.stacks) {
-      const design = playerEmpire.shipDesigns.find((d) => d.id === stack.designId);
+      const stackName = stackDisplayName(stack, playerEmpire);
       const row = document.createElement("div");
       row.className = "fleet-stack-row";
-      row.innerHTML = `<span>${stack.count}× ${design?.name ?? "Unbekanntes Design"}</span>`;
+      row.innerHTML = `<span>${stack.count}× ${stackName}</span>`;
       if (stack.count > 1) {
         const splitInput = document.createElement("input");
         splitInput.type = "number";
@@ -411,11 +436,14 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
   }
 
   for (const fleet of incoming) {
-    const eta = Math.max(1, Math.ceil(fleet.travelRemaining / fleet.travelSpeed));
+    // Gesamt-ETA über die vollständige (ggf. mehrstufige) Restroute (ROADMAP
+    // v0.13/v0.14), nicht nur die aktuelle Etappe.
+    const eta = estimateFleetEta(galaxy, fleet);
     const card = document.createElement("div");
     card.className = "fleet-card";
     const shipCount = fleet.stacks.reduce((s, st) => s + st.count, 0);
-    card.textContent = `Ankommend: ${shipCount} Schiff(e), ETA ${eta} Runde${eta === 1 ? "" : "n"}`;
+    const destName = galaxy.systems.find((s) => s.id === (fleet.finalDestinationSystemId ?? fleet.destinationSystemId))?.name ?? "?";
+    card.textContent = `Unterwegs nach ${destName}: ${shipCount} Schiff(e), ETA ${eta} Runde${eta === 1 ? "" : "n"}`;
     section.appendChild(card);
   }
 
@@ -439,7 +467,10 @@ export function updateTopbarInfo(galaxy) {
     const techLevelSum = DISCIPLINES.reduce((s, d) => s + (player.research?.techLevel[d.id] ?? 0), 0);
     const range = player.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC;
     const rangeText = range >= UNLIMITED_TRAVEL_RANGE_PARSEC ? "unbegrenzt" : `${range} Parsec`;
-    statsEl.textContent = `${race?.name ?? "Spieler"} · Kolonieschiffe: ${player.colonyShips} · Forschung: ${fmt(player.lastResearchIncome ?? 0, 1)} RP/Runde · Techstufen gesamt: ${techLevelSum} · Flottenreichweite: ${rangeText}`;
+    // Kolonieschiffe (ROADMAP v0.14) sind physische Flotten-Stacks statt
+    // eines abstrakten Zählers – Gesamtzahl über alle Flotten hinweg.
+    const colonyShipCount = countColonyShips(galaxy, player.id);
+    statsEl.textContent = `${race?.name ?? "Spieler"} · Kolonieschiffe: ${colonyShipCount} · Forschung: ${fmt(player.lastResearchIncome ?? 0, 1)} RP/Runde · Techstufen gesamt: ${techLevelSum} · Flottenreichweite: ${rangeText}`;
   } else {
     statsEl.textContent = "";
   }

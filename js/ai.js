@@ -1,5 +1,5 @@
 import { getPersonality, getObjective, PERSONALITIES, OBJECTIVES } from "./data/aiPersonality.js";
-import { normalizeSliders } from "./data/economy.js";
+import { normalizeSliders, COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 import { normalizeAllocation } from "./research.js";
 import { isColonizable, colonizePlanet, maxPopulation } from "./economy.js";
 import { addShipDesign } from "./shipDesign.js";
@@ -116,6 +116,14 @@ function travelTurnsFromPixels(empire, travelPixels) {
   return distanceParsec / Math.max(1, empire.travelSpeedParsec ?? 1);
 }
 
+// Zählt nur echte Kampfschiffe (ohne Kolonieschiffe, ROADMAP v0.14) – ein
+// unbewaffnetes Kolonieschiff soll weder als "starke Kampfflotte" für
+// Angriffe/Guardian-Angriffe zählen noch Bodentruppen stellen (siehe
+// js/invasion.js fleetTroopCapacity).
+function combatShipCount(fleet) {
+  return fleet.stacks.reduce((sum, s) => (s.designId === COLONY_SHIP_DESIGN_ID ? sum : sum + s.count), 0);
+}
+
 function applyEconomyPolicy(galaxy, empire) {
   const objective = getObjective(empire.objectiveId);
   const sliderWeights = normalizeSliders(objective.sliders);
@@ -132,42 +140,62 @@ function applyEconomyPolicy(galaxy, empire) {
   empire.research.allocation = normalizeAllocation(objective.research);
 }
 
-// Wählt das Kolonisierungsziel per Attraktivitätswert (siehe
-// planetAttractiveness) statt reiner Distanz – organische Ausbreitung zu
-// den lohnendsten erreichbaren Welten statt "Blobbing" zum nächstbesten
-// Planeten ("MoO KI Verhalten.docx", ROADMAP v0.12). Das bewachte
-// Orion-System wird ignoriert (siehe attemptGuardianAssault).
+// Kolonieschiffe sind physische Flotteneinheiten (ROADMAP v0.14): Ziele
+// werden weiterhin per Attraktivitätswert bewertet (siehe
+// planetAttractiveness, "MoO KI Verhalten.docx" ROADMAP v0.12), aber jedes
+// eigene, stationäre Kolonieschiff agiert einzeln – steht es bereits an
+// einem kolonisierbaren System, kolonisiert es sofort; sonst wird es zum
+// besten ab SEINER aktuellen Position erreichbaren Ziel verlegt. Das
+// bewachte Orion-System wird ignoriert (siehe attemptGuardianAssault).
 function attemptColonization(galaxy, empire) {
-  if (empire.colonyShips < 1) return;
-  const ownedSystems = galaxy.systems.filter((s) => s.planets.some((p) => p.colonizedBy === empire.id));
-  if (ownedSystems.length === 0) return;
+  const colonyFleets = galaxy.fleets.filter(
+    (f) =>
+      f.ownerEmpireId === empire.id &&
+      !f.destinationSystemId &&
+      f.stacks.some((s) => s.designId === COLONY_SHIP_DESIGN_ID && s.count > 0)
+  );
+  if (colonyFleets.length === 0) return;
 
-  // Ein Multi-Source-Dijkstra ab allen eigenen Kolonien statt eines
-  // Einzelpfads pro Kandidatenplanet (siehe js/starlanes.js).
-  const distances = multiSourceLaneDistances(galaxy, ownedSystems.map((s) => s.id));
   const rangePixels = (empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC) * PARSEC_PIXELS;
+  const claimedPlanetIds = new Set();
 
-  let best = null;
-  let bestValue = -Infinity;
-  for (const system of galaxy.systems) {
-    const travelPixels = distances.get(system.id);
-    // Sowohl unerreichbar (kein Sternenstraßen-Pfad) als auch außerhalb der
-    // Treibstoffreichweite ausschließen – sonst würde die KI wertvolle,
-    // aber unerreichbare Planeten anvisieren und colonizePlanet() lehnt sie
-    // dann stillschweigend ab (Kolonieschiffe stauen sich nutzlos an).
-    if (travelPixels === undefined || travelPixels > rangePixels) continue;
-    for (const planet of system.planets) {
-      if (planet.isOrion) continue;
-      if (!isColonizable(planet, empire)) continue;
-      const travelTurns = travelTurnsFromPixels(empire, travelPixels);
-      const value = planetAttractiveness(planet, empire, travelTurns);
-      if (value > bestValue) {
-        bestValue = value;
-        best = { systemId: system.id, planetId: planet.id };
+  for (const fleet of colonyFleets) {
+    const currentSystem = galaxy.systems.find((s) => s.id === fleet.systemId);
+    if (!currentSystem) continue;
+
+    const localTarget = currentSystem.planets.find(
+      (p) => !p.isOrion && !claimedPlanetIds.has(p.id) && isColonizable(p, empire)
+    );
+    if (localTarget) {
+      const result = colonizePlanet(galaxy, currentSystem.id, localTarget.id, empire.id);
+      if (result.ok) {
+        claimedPlanetIds.add(localTarget.id);
+        continue;
       }
     }
+
+    const distances = multiSourceLaneDistances(galaxy, [currentSystem.id]);
+    let best = null;
+    let bestValue = -Infinity;
+    for (const system of galaxy.systems) {
+      const travelPixels = distances.get(system.id);
+      if (travelPixels === undefined || travelPixels > rangePixels) continue;
+      for (const planet of system.planets) {
+        if (planet.isOrion || claimedPlanetIds.has(planet.id)) continue;
+        if (!isColonizable(planet, empire)) continue;
+        const travelTurns = travelTurnsFromPixels(empire, travelPixels);
+        const value = planetAttractiveness(planet, empire, travelTurns);
+        if (value > bestValue) {
+          bestValue = value;
+          best = { system, planet };
+        }
+      }
+    }
+    if (best) {
+      sendFleet(galaxy, fleet.id, best.system.id);
+      claimedPlanetIds.add(best.planet.id);
+    }
   }
-  if (best) colonizePlanet(galaxy, best.systemId, best.planetId, empire.id);
 }
 
 function considerDiplomacy(galaxy, empire, seed, turn) {
@@ -199,7 +227,7 @@ function attemptAggression(galaxy, empire) {
   const homeSystem = galaxy.systems.find((s) => s.homeworldEmpireId === empire.id);
   if (!homeSystem) return;
   const fleets = findFleetsAt(galaxy, homeSystem.id, empire.id);
-  const strongFleet = fleets.find((f) => f.stacks.reduce((sum, s) => sum + s.count, 0) >= 2);
+  const strongFleet = fleets.find((f) => combatShipCount(f) >= 2);
   if (!strongFleet) return;
 
   const atWarIds = new Set(atWarWith.map((e) => e.id));
@@ -271,7 +299,7 @@ function attemptGuardianAssault(galaxy, empire, seed, turn) {
   if (!homeSystem) return;
 
   const fleets = findFleetsAt(galaxy, homeSystem.id, empire.id);
-  const strongFleet = fleets.find((f) => f.stacks.reduce((sum, s) => sum + s.count, 0) >= ORION_ASSAULT_MIN_SHIPS);
+  const strongFleet = fleets.find((f) => combatShipCount(f) >= ORION_ASSAULT_MIN_SHIPS);
   if (!strongFleet) return;
 
   sendFleet(galaxy, strongFleet.id, orionSystem.id);

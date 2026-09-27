@@ -5,7 +5,7 @@ import { simulateTurn, colonizePlanet, computePlanetProduction } from "./economy
 import { normalizeSliders } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
-import { sendFleet, splitStack } from "./fleets.js";
+import { sendFleet, splitStack, mergeFleets } from "./fleets.js";
 import { DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import {
   getRelation,
@@ -100,6 +100,16 @@ const panelCallbacks = {
     }
     refreshSidePanel();
     saveGame();
+  },
+  onMergeFleets(fleetIds) {
+    const result = mergeFleets(gameState.galaxy, fleetIds);
+    if (!result.ok) {
+      flashTopbar(result.reason);
+      return;
+    }
+    refreshSidePanel();
+    saveGame();
+    flashTopbar("Flotten zusammengelegt.");
   },
   onArmFleetMove(fleetId) {
     gameState.pendingFleetMove = fleetId;

@@ -286,6 +286,45 @@ spielbar von der Kolonisierung bis zum Sieg.
   Nutzer-Recherche zur MoO2-Reichweitenmechanik) – nur die
   Fuel-Cell-Forschung (v0.9.1) erhöht die Reichweite.
 
+- **v0.14 – Flottenverwaltung & physische Kolonieschiffe**
+  Setzt den Rest der Flottensystem-Anforderungen um: Ein Klick auf ein
+  System zeigt bereits seit v0.7 alle dort stationierten und ankommenden
+  eigenen Flotten einzeln mit Aufteilen- und Verlegen-Aktion pro Flotte;
+  neu ist eine **Zusammenlegen**-Funktion (`js/fleets.js` `mergeFleets`),
+  die alle eigenen, stationären Flotten an einem System per Klick zu einer
+  einzigen vereint (gleiche Design-Stacks werden addiert). Die
+  Ankunftsanzeige einer reisenden Flotte nennt jetzt das tatsächliche Ziel
+  und zeigt eine korrekte Gesamt-ETA über die volle (ggf. mehrstufige)
+  Restroute (`estimateFleetEta`) statt nur der aktuellen Etappe.
+
+  Kolonieschiffe waren bisher ein rein abstrakter, imperiumsweiter Zähler
+  (`empire.colonyShips`), der Kolonisierung unabhängig von jeder
+  physischen Position erlaubte. Sie sind jetzt echte Flotten-Stacks
+  (`COLONY_SHIP_DESIGN_ID`): jeder Planet ohne explizites
+  Kriegsschiff-Ziel baut sie an seinem eigenen System an (derselbe
+  Ansparungs-Mechanismus wie beim Kriegsschiffbau, nur mit fixen Kosten
+  statt eines Designs), das Startkolonieschiff jedes Imperiums entsteht als
+  Flotte am Heimatsystem. `colonizePlanet` verlangt jetzt eine eigene,
+  stationäre Flotte mit einem Kolonieschiff-Stack am Zielsystem und
+  verbraucht bei Erfolg eines daraus – die vorherige, separate
+  Reichweitenprüfung entfällt, da diese bereits beim Losschicken der
+  Flotte erfolgt. Die KI kolonisiert dementsprechend sofort, wenn eines
+  ihrer Kolonieschiffe bereits an einem passenden System steht, und
+  verlegt sonst jedes einzelne, unbeschäftigte Kolonieschiff eigenständig
+  zum besten ab seiner aktuellen Position erreichbaren Ziel (weiterhin nach
+  der Attraktivitätsformel aus v0.12). Kolonieschiffe zählen dabei
+  konsequent nicht mehr als Kampfschiffe: weder für die
+  "starke Flotte"-Schwelle bei Angriffen/Guardian-Angriffen noch für die
+  Transportkapazität bei Bodeninvasionen (`fleetTroopCapacity`).
+
+  SAVE_VERSION auf 11 erhöht (alte Speicherstände kennen keine physischen
+  Kolonieschiff-Flotten). *Vereinfacht:* Kolonieschiffe sind in
+  `js/combat.js` unsichtbar (kein Design-Eintrag, siehe
+  `computeDesignStats`) und daher nie an einem Kampf beteiligt – ein
+  unbeschütztes Kolonieschiff in einem umkämpften System wird weder
+  angegriffen noch kann es sich verteidigen; kein Fog of War, das ändert
+  nichts am Zielwahl-Verhalten.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign

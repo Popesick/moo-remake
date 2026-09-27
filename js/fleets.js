@@ -1,5 +1,6 @@
 import { PARSEC_PIXELS, DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import { findPath, laneDistance } from "./starlanes.js";
+import { COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 
 function nextFleetId(galaxy) {
   galaxy.nextFleetId = (galaxy.nextFleetId ?? 1) + 1;
@@ -133,6 +134,96 @@ export function splitStack(galaxy, fleetId, designId, splitCount) {
   };
   galaxy.fleets.push(newFleet);
   return { ok: true, fleet: newFleet };
+}
+
+// Legt mehrere eigene, stationäre Flotten am selben System zu einer
+// einzigen zusammen (ROADMAP v0.14, Flottenverwaltung); gleiche
+// Design-Stacks werden addiert. Die erste übergebene Flotte bleibt
+// bestehen (nimmt alle Stacks auf), die übrigen werden gelöscht.
+export function mergeFleets(galaxy, fleetIds) {
+  const fleets = fleetIds.map((id) => galaxy.fleets.find((f) => f.id === id)).filter(Boolean);
+  if (fleets.length < 2) return { ok: false, reason: "Mindestens zwei Flotten nötig." };
+
+  const [target, ...rest] = fleets;
+  if (
+    fleets.some(
+      (f) => f.systemId !== target.systemId || f.ownerEmpireId !== target.ownerEmpireId || f.destinationSystemId
+    )
+  ) {
+    return { ok: false, reason: "Nur eigene, stationäre Flotten am selben System können zusammengelegt werden." };
+  }
+
+  const mergedStacks = new Map();
+  for (const fleet of fleets) {
+    for (const stack of fleet.stacks) {
+      mergedStacks.set(stack.designId, (mergedStacks.get(stack.designId) ?? 0) + stack.count);
+    }
+  }
+  target.stacks = [...mergedStacks.entries()].map(([designId, count]) => ({ designId, count }));
+
+  const removeIds = new Set(rest.map((f) => f.id));
+  galaxy.fleets = galaxy.fleets.filter((f) => !removeIds.has(f.id));
+  return { ok: true, fleet: target };
+}
+
+// Kolonieschiffe (ROADMAP v0.14): physische Flotten-Stacks statt eines
+// abstrakten Zählers. Kolonisierung erfordert eine eigene, stationäre
+// Flotte mit mindestens einem Kolonieschiff-Stack am Zielsystem.
+export function findColonyShipFleetAt(galaxy, empireId, systemId) {
+  return (
+    galaxy.fleets.find(
+      (f) =>
+        f.ownerEmpireId === empireId &&
+        f.systemId === systemId &&
+        !f.destinationSystemId &&
+        f.stacks.some((s) => s.designId === COLONY_SHIP_DESIGN_ID && s.count > 0)
+    ) ?? null
+  );
+}
+
+// Verbraucht ein Kolonieschiff aus der übergebenen Flotte (siehe
+// colonizePlanet in js/economy.js) und entfernt die Flotte, falls sie
+// dadurch leer wird.
+export function consumeColonyShip(galaxy, fleet) {
+  const stack = fleet.stacks.find((s) => s.designId === COLONY_SHIP_DESIGN_ID && s.count > 0);
+  if (!stack) return false;
+  stack.count -= 1;
+  fleet.stacks = fleet.stacks.filter((s) => s.count > 0);
+  if (fleetShipCount(fleet) === 0) {
+    galaxy.fleets = galaxy.fleets.filter((f) => f.id !== fleet.id);
+  }
+  return true;
+}
+
+// Gesamtzahl der Kolonieschiffe eines Imperiums über alle Flotten hinweg
+// (stationär und unterwegs) – nur für Anzeigezwecke (Topbar), siehe js/ui.js.
+export function countColonyShips(galaxy, empireId) {
+  return galaxy.fleets
+    .filter((f) => f.ownerEmpireId === empireId)
+    .flatMap((f) => f.stacks)
+    .filter((s) => s.designId === COLONY_SHIP_DESIGN_ID)
+    .reduce((sum, s) => sum + s.count, 0);
+}
+
+// Gesamt-ETA (Runden) einer ggf. mehrstufigen Reise: aktuelle Etappe plus
+// restlicher Sternenstraßen-Pfad (ROADMAP v0.13/v0.14) – die reine
+// fleet.travelRemaining/-Speed-Rechnung berücksichtigt sonst nur die
+// aktuelle Etappe und unterschätzt die tatsächliche Ankunftszeit bei
+// Mehrstufen-Reisen.
+export function estimateFleetEta(galaxy, fleet) {
+  if (!fleet.destinationSystemId) return 0;
+  let remainingPixels = fleet.travelRemaining;
+  if (fleet.remainingPath && fleet.remainingPath.length > 0) {
+    const systemsById = new Map(galaxy.systems.map((s) => [s.id, s]));
+    let prev = systemsById.get(fleet.destinationSystemId);
+    for (const hopId of fleet.remainingPath) {
+      const hop = systemsById.get(hopId);
+      if (!hop || !prev) break;
+      remainingPixels += Math.hypot(hop.x - prev.x, hop.y - prev.y);
+      prev = hop;
+    }
+  }
+  return Math.max(1, Math.ceil(remainingPixels / fleet.travelSpeed));
 }
 
 // Bewegt alle unterwegs befindlichen Flotten um ihre Rundengeschwindigkeit

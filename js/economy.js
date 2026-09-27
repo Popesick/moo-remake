@@ -4,7 +4,7 @@ import { getPlanetSize } from "./data/planetSizes.js";
 import { getDifficulty } from "./data/difficulty.js";
 import { initEmpireResearch, processResearchTurn, applyTechEffect } from "./research.js";
 import { computeDesignStats } from "./shipDesign.js";
-import { addShipsToSystem, advanceFleets, isSystemInRange } from "./fleets.js";
+import { addShipsToSystem, advanceFleets, findColonyShipFleetAt, consumeColonyShip } from "./fleets.js";
 import { resolveSystemCombat } from "./combat.js";
 import { DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import { getRaceTraits } from "./data/raceTraits.js";
@@ -24,6 +24,7 @@ import {
   DEFAULT_ECO_CLEANUP_UNITS_PER_BC,
   MAX_GROWTH_RATE,
   COLONY_SHIP_COST_BC,
+  COLONY_SHIP_DESIGN_ID,
   START_COLONY_POPULATION,
   HOMEWORLD_START_POPULATION,
   HOMEWORLD_START_FACTORIES,
@@ -52,8 +53,6 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
   const traits = getRaceTraits(empire.raceId);
   const base = {
     ...empire,
-    colonyShips: 1,
-    shipProgress: 0,
     defenseBudget: 0,
     planetologyTechLevel: 0,
     roboticControlsLevel: ROBOTIC_CONTROLS_BASE + (traits.roboticControlsBonus ?? 0),
@@ -141,7 +140,7 @@ export function computePlanetProduction(planet, empire) {
 // Verschmutzung, Bevölkerungswachstum, Kolonieschiff-Ansparung, Forschung.
 export function simulateTurn(galaxy) {
   const empireById = new Map(galaxy.empires.map((e) => [e.id, e]));
-  const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, shipBC: 0, defBC: 0, totalBC: 0 }]));
+  const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, defBC: 0, totalBC: 0 }]));
   const turnForAi = galaxy.turn ?? 1;
 
   for (const empire of galaxy.empires) {
@@ -190,23 +189,33 @@ export function simulateTurn(galaxy) {
           planet.shipCarry = fund - built * stats.costBC;
           if (built > 0) addShipsToSystem(galaxy, planet.colonizedBy, system.id, design.id, built);
         } else {
-          delta.shipBC += prod.bc.ship;
+          // Ohne explizites Kriegsschiff-Ziel baut der Planet Kolonieschiffe
+          // (ROADMAP v0.14): echte Flotteneinheiten am eigenen System statt
+          // eines abstrakten, imperiumsweiten Zählers – exakt derselbe
+          // Ansparungs-Mechanismus wie beim Kriegsschiffbau oben, nur mit
+          // fixen Kosten statt eines Designs.
+          const fund = prod.bc.ship + (planet.shipCarry ?? 0);
+          const built = Math.floor(fund / COLONY_SHIP_COST_BC);
+          planet.shipCarry = fund - built * COLONY_SHIP_COST_BC;
+          if (built > 0) addShipsToSystem(galaxy, planet.colonizedBy, system.id, COLONY_SHIP_DESIGN_ID, built);
         }
       }
     }
   }
 
   // Handelsabkommen zählen eine Runde weiter und speisen ihren aktuellen
-  // BC-Ertrag (ggf. negativ während der Anlaufphase) anteilig in Forschung,
-  // Verteidigung und Kolonieschiff-Fortschritt beider Vertragspartner ein
-  // (siehe js/diplomacy.js, ROADMAP v0.9).
+  // BC-Ertrag (ggf. negativ während der Anlaufphase) anteilig in Forschung
+  // und Verteidigung beider Vertragspartner ein (siehe js/diplomacy.js,
+  // ROADMAP v0.9). Seit v0.14 kein Kolonieschiff-Anteil mehr, da
+  // Kolonieschiffe planetengebunden gebaut werden (siehe oben) und dieser
+  // empireweite Bonus keinem einzelnen Planeten zuzuordnen ist – der
+  // ehemalige Schiffsanteil fließt stattdessen in die Verteidigung.
   for (const { empireIdA, empireIdB, bonusBC } of tickTradeAgreements(galaxy)) {
     for (const empireId of [empireIdA, empireIdB]) {
       const delta = empireDeltas.get(empireId);
       if (!delta) continue;
       delta.techBC += bonusBC * 0.4;
-      delta.defBC += bonusBC * 0.3;
-      delta.shipBC += bonusBC * 0.3;
+      delta.defBC += bonusBC * 0.6;
       delta.totalBC += bonusBC;
     }
   }
@@ -221,13 +230,6 @@ export function simulateTurn(galaxy) {
     empire.lastResearchIncome = delta.techBC;
     empire.espionagePoints = (empire.espionagePoints ?? 0) +
       delta.totalBC * (empire.espionageAllocationPct / 100) * ESPIONAGE_GENERATION_RATE;
-
-    empire.shipProgress += delta.shipBC;
-    const newShips = Math.floor(empire.shipProgress / COLONY_SHIP_COST_BC);
-    if (newShips > 0) {
-      empire.colonyShips += newShips;
-      empire.shipProgress -= newShips * COLONY_SHIP_COST_BC;
-    }
 
     const breakthroughs = processResearchTurn(empire, delta.techBC, galaxy.seed, turn);
     if (breakthroughs.length > 0) breakthroughsByEmpire.set(empire.id, breakthroughs);
@@ -335,9 +337,7 @@ function resolveAllCombats(galaxy) {
 
 export function colonizePlanet(galaxy, systemId, planetId, empireId) {
   const empire = galaxy.empires.find((e) => e.id === empireId);
-  if (!empire || empire.colonyShips < 1) {
-    return { ok: false, reason: "Kein Kolonieschiff verfügbar." };
-  }
+  if (!empire) return { ok: false, reason: "Imperium nicht gefunden." };
   const system = galaxy.systems.find((s) => s.id === systemId);
   const planet = system?.planets.find((p) => p.id === planetId);
   if (!planet) return { ok: false, reason: "Planet nicht gefunden." };
@@ -347,14 +347,16 @@ export function colonizePlanet(galaxy, systemId, planetId, empireId) {
   if (isOrionGuarded(galaxy, systemId)) {
     return { ok: false, reason: "Der Guardian of Orion bewacht dieses System noch." };
   }
-  // Kolonieschiffe unterliegen derselben Treibstoffreichweite wie
-  // Kampfflotten (ROADMAP v0.10), siehe js/fleets.js isSystemInRange.
-  if (!isSystemInRange(galaxy, empire, system)) {
-    const range = empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC;
-    return { ok: false, reason: `Ziel außerhalb der Treibstoffreichweite (${range} Parsec ab eigenen Kolonien).` };
+  // Kolonisierung erfordert ein physisch anwesendes Kolonieschiff (ROADMAP
+  // v0.14) statt eines abstrakten Zählers – die Treibstoffreichweite wurde
+  // bereits beim Losschicken der Flotte geprüft (js/fleets.js sendFleet),
+  // eine erneute Reichweitenkontrolle hier entfällt daher.
+  const colonyFleet = findColonyShipFleetAt(galaxy, empireId, systemId);
+  if (!colonyFleet) {
+    return { ok: false, reason: "Kein Kolonieschiff an diesem System stationiert." };
   }
 
-  empire.colonyShips -= 1;
+  consumeColonyShip(galaxy, colonyFleet);
   planet.colonizedBy = empireId;
   initColony(planet, { isHomeworld: false });
   return { ok: true };

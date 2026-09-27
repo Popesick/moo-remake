@@ -1,5 +1,6 @@
 import { getTech } from "./data/techTree.js";
 import { isAtWar, setRelationStatus } from "./diplomacy.js";
+import { COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 
 const MAX_GROUND_ROUNDS = 20;
 const TROOPS_PER_SHIP = 5; // abstrahierte Transportkapazität ohne eigenen Transporter-Schiffstyp
@@ -30,9 +31,14 @@ export function maxInvasionTroops(empire, planet) {
 }
 
 // Fleet-basierte Transportkapazität (Platzhalter ohne dedizierten
-// Transporter-Schiffstyp): Anzahl Schiffe × Truppen pro Schiff.
+// Transporter-Schiffstyp): Anzahl Kampfschiffe × Truppen pro Schiff.
+// Kolonieschiffe (ROADMAP v0.14) sind unbewaffnete Zivilschiffe und stellen
+// keine Bodentruppen.
 export function fleetTroopCapacity(fleet) {
-  const shipCount = fleet.stacks.reduce((sum, s) => sum + s.count, 0);
+  const shipCount = fleet.stacks.reduce(
+    (sum, s) => (s.designId === COLONY_SHIP_DESIGN_ID ? sum : sum + s.count),
+    0
+  );
   return shipCount * TROOPS_PER_SHIP;
 }
 

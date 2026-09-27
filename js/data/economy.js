@@ -12,6 +12,12 @@ export const WASTE_PER_FACTORY = 0.25;
 export const DEFAULT_ECO_CLEANUP_UNITS_PER_BC = 1; // 1 BC beseitigt 1 Einheit Verschmutzung vor Eco-Restoration-Techs
 export const MAX_GROWTH_RATE = 0.18; // Wachstumsrate am Scheitelpunkt (50% Kapazität) pro Runde
 export const COLONY_SHIP_COST_BC = 60;
+// Pseudo-Design-ID für Kolonieschiffe (ROADMAP v0.14): kein echtes,
+// spielerdefiniertes Schiffsdesign (siehe js/shipDesign.js), sondern ein
+// fester Flotten-Stack-Typ ohne Kampfwerte – taucht daher in
+// computeDesignStats/combat.js absichtlich nicht auf (Kolonieschiffe
+// kämpfen nicht mit).
+export const COLONY_SHIP_DESIGN_ID = "colony-ship";
 export const START_COLONY_POPULATION = 1;
 export const HOMEWORLD_START_POPULATION = 30;
 export const HOMEWORLD_START_FACTORIES = 8;

@@ -9,6 +9,8 @@ import { assignAiBehavior, createStarterDesign } from "./ai.js";
 import { initRelations } from "./diplomacy.js";
 import { initOrion } from "./orion.js";
 import { buildStarlanes } from "./starlanes.js";
+import { addShipsToSystem } from "./fleets.js";
+import { COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 
 export const GALAXY_SIZES = {
   small: { label: "Klein (Small)", systems: 24, width: 2200, height: 1500 },
@@ -153,6 +155,15 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
   };
   initRelations(galaxy);
   initOrion(galaxy, rng);
+
+  // Startkolonieschiff als echte Flotteneinheit am Heimatsystem (ROADMAP
+  // v0.14: Kolonieschiffe sind physische Flotten-Stacks statt eines
+  // abstrakten Zählers, siehe js/economy.js colonizePlanet).
+  for (const empire of empires) {
+    const homeSystem = systems.find((s) => s.homeworldEmpireId === empire.id);
+    if (homeSystem) addShipsToSystem(galaxy, empire.id, homeSystem.id, COLONY_SHIP_DESIGN_ID, 1);
+  }
+
   return galaxy;
 }
 
