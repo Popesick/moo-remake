@@ -325,6 +325,16 @@ spielbar von der Kolonisierung bis zum Sieg.
   angegriffen noch kann es sich verteidigen; kein Fog of War, das ändert
   nichts am Zielwahl-Verhalten.
 
+  **Nachbesserung** (Nutzer-Feedback nach dem Release): `applyEconomyPolicy`
+  stellte bei militanter Ausrichtung (Militarist-Ziel oder `warBias ≥ 0.5`)
+  bisher UNBEDINGT alle eigenen Planeten auf Kriegsschiffbau um, sobald ein
+  Design existierte – dadurch baute ein militantes Imperium nie wieder ein
+  Kolonieschiff und blieb faktisch für den Rest der Partie bei seinen
+  Startkolonien (meist 2) stehen. Jetzt bleibt immer der
+  bevölkerungsreichste eigene Planet für Kolonieschiffbau reserviert,
+  unabhängig von der Ausrichtung; alle übrigen bauen bei militanter
+  Ausrichtung weiterhin Kriegsschiffe.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign

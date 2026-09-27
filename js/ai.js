@@ -127,13 +127,31 @@ function combatShipCount(fleet) {
 function applyEconomyPolicy(galaxy, empire) {
   const objective = getObjective(empire.objectiveId);
   const sliderWeights = normalizeSliders(objective.sliders);
+  const militant = objective.id === "militarist" || getPersonality(empire.personalityId).warBias >= 0.5;
+
+  // Auch militante KIs sollen nie vollständig aufhören zu expandieren
+  // (Nutzer-Feedback zu v0.14: da vorher ALLE Planeten unconditional auf
+  // Kriegsschiffe umgestellt wurden, sobald ein Design existierte, blieben
+  // militante Imperien für den Rest der Partie bei ~2 Kolonien stehen,
+  // weil nie wieder ein Kolonieschiff gebaut wurde). Der bevölkerungs-
+  // reichste eigene Planet bleibt deshalb immer für Kolonieschiffbau
+  // reserviert, alle übrigen bauen bei militanter Ausrichtung Kriegsschiffe.
+  let expansionPlanet = null;
+  if (militant && empire.shipDesigns.length > 0) {
+    const ownedPlanets = galaxy.systems.flatMap((s) => s.planets).filter((p) => p.colonizedBy === empire.id);
+    expansionPlanet = ownedPlanets.reduce(
+      (best, p) => (!best || p.population > best.population ? p : best),
+      null
+    );
+  }
+
   for (const system of galaxy.systems) {
     for (const planet of system.planets) {
       if (planet.colonizedBy !== empire.id) continue;
       planet.sliders = { ...sliderWeights };
       if (empire.shipDesigns.length > 0) {
-        const militant = objective.id === "militarist" || getPersonality(empire.personalityId).warBias >= 0.5;
-        planet.productionTarget = militant ? empire.shipDesigns[0].id : null;
+        const buildsWarship = militant && planet !== expansionPlanet;
+        planet.productionTarget = buildsWarship ? empire.shipDesigns[0].id : null;
       }
     }
   }
