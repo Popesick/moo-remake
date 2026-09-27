@@ -14,6 +14,7 @@ import { checkCouncilActivation, checkCouncilVoteDue } from "./council.js";
 import { checkGameEnd } from "./victory.js";
 import { resolveOrionGuardianCombat, isOrionGuarded } from "./orion.js";
 import { maybeTriggerGalacticEvent } from "./events.js";
+import { updateExploredSystems, runAutoExplore } from "./exploration.js";
 import { ESPIONAGE_GENERATION_RATE, DEFAULT_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import {
   BASE_BC_PER_POP,
@@ -145,6 +146,10 @@ export function simulateTurn(galaxy) {
 
   for (const empire of galaxy.empires) {
     if (!empire.isPlayer) runAiTurn(galaxy, empire, galaxy.seed, turnForAi);
+    // Auto-Erkundung (ROADMAP v0.15): läuft für alle Imperien, ist aber
+    // praktisch nur beim Spieler relevant, da nur er Flotten mit
+    // fleet.autoExplore markieren kann.
+    runAutoExplore(galaxy, empire);
   }
 
   for (const system of galaxy.systems) {
@@ -236,6 +241,10 @@ export function simulateTurn(galaxy) {
   }
 
   const arrivals = advanceFleets(galaxy);
+  // Nebel des Krieges (ROADMAP v0.15): frisch angekommene Systeme sofort
+  // als erforscht markieren, bevor Kampfberichte/Events etc. darauf Bezug
+  // nehmen.
+  updateExploredSystems(galaxy);
   const battleReports = resolveAllCombats(galaxy);
 
   // Guardian of Orion (ROADMAP v0.10): unabhängig vom Diplomatiestatus, da

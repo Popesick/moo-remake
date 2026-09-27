@@ -18,6 +18,7 @@ import { DEFAULT_TRAVEL_RANGE_PARSEC, UNLIMITED_TRAVEL_RANGE_PARSEC } from "./da
 import { isOrionGuarded } from "./orion.js";
 import { killCountFor, ELIMINATION_KILL_BONUS, GUARDIAN_KILL_BONUS } from "./victory.js";
 import { GALAXY_SIZES } from "./galaxyGen.js";
+import { isSystemExplored, isFleetEligibleForAutoExplore } from "./exploration.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -318,6 +319,15 @@ export function renderSystemPanel(system, galaxy, callbacks) {
   empty.hidden = true;
   details.hidden = false;
 
+  const playerEmpireForFog = galaxy.empires.find((e) => e.isPlayer);
+  if (playerEmpireForFog && !isSystemExplored(galaxy, playerEmpireForFog.id, system.id)) {
+    document.getElementById("system-name").textContent = "Unerforscht";
+    document.getElementById("system-star").textContent = "Noch nicht besucht – Flotte hierher schicken, um dieses System zu erkunden.";
+    document.getElementById("system-planets").innerHTML = "";
+    document.getElementById("system-fleets").innerHTML = "";
+    return;
+  }
+
   document.getElementById("system-name").textContent = system.name + (system.isHomeworld ? " ★" : "");
   const star = getStarType(system.star);
   const orionSuffix = system.isOrionSystem
@@ -430,6 +440,18 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
     moveBtn.textContent = "Verlegen (Ziel auf Karte klicken)";
     moveBtn.addEventListener("click", () => callbacks.onArmFleetMove(fleet.id));
     actions.appendChild(moveBtn);
+
+    // Auto-Erkundung (ROADMAP v0.15, Nutzerwunsch): nur für Flotten aus
+    // reinen Small-Rumpf-Schiffen. Fliegt automatisch jede Runde zum
+    // nächstgelegenen noch unerforschten, erreichbaren System.
+    if (isFleetEligibleForAutoExplore(fleet, playerEmpire)) {
+      const exploreBtn = document.createElement("button");
+      exploreBtn.textContent = fleet.autoExplore ? "Automatisch erforschen: AN" : "Automatisch erforschen";
+      if (fleet.autoExplore) exploreBtn.classList.add("btn-active");
+      exploreBtn.addEventListener("click", () => callbacks.onToggleAutoExplore(fleet.id));
+      actions.appendChild(exploreBtn);
+    }
+
     card.appendChild(actions);
 
     section.appendChild(card);

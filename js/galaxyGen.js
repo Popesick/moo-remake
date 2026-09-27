@@ -11,6 +11,7 @@ import { initOrion } from "./orion.js";
 import { buildStarlanes } from "./starlanes.js";
 import { addShipsToSystem } from "./fleets.js";
 import { COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
+import { initEmpireExploration } from "./exploration.js";
 
 export const GALAXY_SIZES = {
   small: { label: "Klein (Small)", systems: 24, width: 2200, height: 1500 },
@@ -158,10 +159,12 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
 
   // Startkolonieschiff als echte Flotteneinheit am Heimatsystem (ROADMAP
   // v0.14: Kolonieschiffe sind physische Flotten-Stacks statt eines
-  // abstrakten Zählers, siehe js/economy.js colonizePlanet).
+  // abstrakten Zählers, siehe js/economy.js colonizePlanet). Zugleich gilt
+  // das Heimatsystem als erforscht (ROADMAP v0.15, Nebel des Krieges).
   for (const empire of empires) {
     const homeSystem = systems.find((s) => s.homeworldEmpireId === empire.id);
     if (homeSystem) addShipsToSystem(galaxy, empire.id, homeSystem.id, COLONY_SHIP_DESIGN_ID, 1);
+    initEmpireExploration(empire, homeSystem?.id ?? null);
   }
 
   return galaxy;
@@ -198,18 +201,19 @@ function generateEmpires(rng, empireCount, seed, difficultyId) {
 }
 
 // Wählt für jedes Imperium ein Startsystem mit garantiert kolonisierbarer
-// Terranisch/Ozean- oder Gaia-Heimatwelt und ausreichendem Abstand zu den
+// Terranisch/Ozean- oder Gaia-Heimatwelt und maximalem Abstand zu den
 // anderen Startsystemen (nur Platzierung – Wirtschaft folgt in v0.2).
+// *Nutzer-Feedback:* Imperien sollen nie benachbart starten. Die
+// Kandidatenauswahl lief zuvor nur über die (räumlich oft geclusterten)
+// terranischen/Gaia-Systeme, wodurch die "größten Abstand"-Maximierung
+// durch einen willkürlich eingeschränkten Kandidatenpool ausgehebelt werden
+// konnte. Die Systemwahl läuft jetzt über ALLE Systeme der Galaxie; eine
+// terranische Heimatwelt wird danach bei Bedarf künstlich angelegt.
 function assignHomeworlds(rng, systems, empires) {
   const empireCount = empires.length;
-  const candidates = systems.filter((s) =>
-    s.planets.some((p) => p.environment === "terran" || p.environment === "gaia")
-  );
-  const pool = candidates.length >= empireCount ? candidates : systems;
   const chosen = [];
-  const minSeparation = Math.min(500, Math.sqrt(pool.length) * 60);
 
-  let remaining = [...pool];
+  let remaining = [...systems];
   for (let e = 0; e < empireCount && remaining.length > 0; e++) {
     let idx = 0;
     if (chosen.length > 0) {

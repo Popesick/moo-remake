@@ -335,6 +335,63 @@ spielbar von der Kolonisierung bis zum Sieg.
   unabhängig von der Ausrichtung; alle übrigen bauen bei militanter
   Ausrichtung weiterhin Kriegsschiffe.
 
+- **v0.15 – Imperiumsplatzierung, Nebel des Krieges & Auto-Erkundung**
+  Drei Nutzer-Feedback-Punkte zum bisherigen Prototyp:
+
+  **Imperiumsplatzierung** (`js/galaxyGen.js` `assignHomeworlds`): Die
+  bestehende "größter Mindestabstand zu bereits gewählten Heimatsystemen"
+  Greedy-Auswahl (Farthest-Point-Sampling) war korrekt, lief aber nur über
+  die (räumlich oft zufällig geclusterten) terranisch/Gaia-Systeme als
+  Kandidatenpool, wodurch die Abstandsmaximierung ausgehebelt werden
+  konnte und Imperien mitunter benachbart starteten. Die Auswahl läuft
+  jetzt über ALLE Systeme der Galaxie; besitzt das gewählte System keine
+  terranische/Gaia-Welt, wird eine künstlich angelegt (Fallback-Logik gab
+  es bereits). Zusätzlich toter Code entfernt (`minSeparation` wurde
+  berechnet, aber nie verwendet). Verifiziert über 15 Seeds/4-Imperien:
+  minimaler Paarabstand zwischen Heimatsystemen 26,7–38,0 Parsec
+  (Ø 31,5), keine Häufungen mehr.
+
+  **Nebel des Krieges** (neues Modul `js/exploration.js`): Der Spieler
+  sieht nur, welche Sternenstraßen von bereits besuchten Systemen
+  wegführen – unbesuchte Systeme dahinter bleiben verborgen, direkte
+  Nachbarn eines erforschten Systems sind nur als Position (ohne Details)
+  sichtbar. `empire.exploredSystemIds` wird bei Galaxie-Erzeugung mit dem
+  Heimatsystem initialisiert und nach jeder Flottenbewegung
+  (`updateExploredSystems`, `js/economy.js` `simulateTurn`) um alle
+  Systeme mit eigenen Kolonien oder eigenen Flotten erweitert – einmal
+  erforscht bleibt dauerhaft bekannt (kein erneutes Vernebeln). Die
+  Kartendarstellung (`js/render.js`) zeigt unerforschte, aber sichtbare
+  Systeme nur als gedimmten Punkt ohne Namen/Planetenzahl/Besitzring,
+  verborgene Systeme, Sternenstraßen und Flottenmarker außerhalb des
+  sichtbaren Bereichs werden gar nicht gezeichnet; `pickSystemAt`
+  verweigert die Auswahl verborgener Systeme. Die Seitenleiste
+  (`js/ui.js`) zeigt für sichtbare-aber-unerforschte Systeme einen
+  "Unerforscht"-Platzhalter statt der Planeten-/Flottendetails.
+
+  **Automatisch erforschen** (`js/exploration.js`
+  `isFleetEligibleForAutoExplore`/`runAutoExplore`): Flotten, die
+  ausschließlich aus Schiffen mit Small-Rumpf bestehen, können in der
+  Seitenleiste (`js/ui.js` `renderFleetSection`) einen Umschalter
+  "Automatisch erforschen" aktivieren. Jede Runde wird eine so markierte,
+  stationäre Flotte automatisch zum nächstgelegenen (Sternenstraßen-Weg-
+  Distanz), noch unerforschten und in Reichweite liegenden System
+  geschickt; ist die Flotte bereits unterwegs oder gibt es kein
+  erreichbares unerforschtes Ziel mehr, bleibt sie stehen. Ein manueller
+  "Verlegen"-Befehl deaktiviert die Auto-Erkundung der betroffenen Flotte
+  wieder (`js/main.js` `onArmFleetMove`), damit der nächste automatische
+  Zug den manuellen Befehl nicht sofort überschreibt.
+
+  SAVE_VERSION auf 12 erhöht (alte Speicherstände kennen weder
+  `empire.exploredSystemIds` noch `fleet.autoExplore`). *Vereinfacht:*
+  Der Nebel des Krieges gilt ausschließlich für den Spieler – die KI bleibt
+  wie in "MoO KI Verhalten.docx" (v0.12) beschrieben allwissend und wählt
+  ihre Ziele unverändert ohne jede Sichtbarkeitsprüfung; Erforschung ist
+  binär (besucht/nicht besucht) ohne graduellen "einmal gesehen, dann
+  wieder vergessen"-Verfall; Auto-Erkundung ist auf reine
+  Small-Rumpf-Flotten beschränkt (Kolonieschiffe und gemischte Flotten
+  sind nicht wählbar) und plant nur eine Runde im Voraus statt eine
+  vollständige Route vorzuberechnen.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign

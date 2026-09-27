@@ -1,11 +1,13 @@
 import { getStarType } from "./data/starTypes.js";
 import { PARSEC_PIXELS } from "./data/logistics.js";
 import { multiSourceLaneDistances } from "./starlanes.js";
+import { getExploredAndVisible } from "./exploration.js";
 
 const STAR_RADIUS_BASE = 6;
 const SELECT_RING_COLOR = "#5b9dff";
 const HOME_RING_COLOR = "#ffb454";
 const ORION_RING_COLOR = "#b46cff";
+const FOG_STAR_COLOR = "#3a4260";
 
 let starfield = null;
 let starfieldSeedKey = null;
@@ -52,16 +54,19 @@ export function centerCameraOnPoint(canvas, camera, worldX, worldY) {
 }
 
 // Sternenstraßen-Netz (ROADMAP v0.13): feste Route zwischen benachbarten
-// Systemen statt freier Bewegung im Raum, siehe js/starlanes.js. Wird immer
-// gezeichnet (nicht nur während der Zielwahl), damit die Konnektivität der
-// Galaxie durchgehend sichtbar ist.
-function renderStarlanes(ctx, camera, galaxy, w, h) {
+// Systemen statt freier Bewegung im Raum, siehe js/starlanes.js. Nebel des
+// Krieges (ROADMAP v0.15): eine Lane wird nur gezeichnet, wenn mindestens
+// ihr eines Ende bereits erforscht ist ("sieht nur, welche Lanes vom
+// aktuellen System wegführen") – explored ist null für Imperien ohne
+// Nebel des Krieges (z.B. beim internen KI-Rendering, falls je genutzt).
+function renderStarlanes(ctx, camera, galaxy, w, h, explored) {
   if (!galaxy.starlanes || galaxy.starlanes.length === 0) return;
   const systemsById = new Map(galaxy.systems.map((s) => [s.id, s]));
   ctx.save();
   ctx.strokeStyle = "rgba(120, 145, 200, 0.22)";
   ctx.lineWidth = 1;
   for (const lane of galaxy.starlanes) {
+    if (explored && !explored.has(lane.a) && !explored.has(lane.b)) continue;
     const a = systemsById.get(lane.a);
     const b = systemsById.get(lane.b);
     if (!a || !b) continue;
@@ -133,7 +138,15 @@ export function render(canvas, galaxy, camera, selectedSystemId, rangeOverlay) {
   }
   ctx.restore();
 
-  renderStarlanes(ctx, camera, galaxy, w, h);
+  // Nebel des Krieges (ROADMAP v0.15): nur für den Spieler, die KI bleibt
+  // allwissend (siehe "MoO KI Verhalten.docx"). Ohne Spielerimperium (z.B.
+  // theoretisch möglich) wird alles wie zuvor uneingeschränkt gezeichnet.
+  const playerEmpire = galaxy.empires?.find((e) => e.isPlayer);
+  const { explored, visible } = playerEmpire
+    ? getExploredAndVisible(galaxy, playerEmpire.id)
+    : { explored: null, visible: null };
+
+  renderStarlanes(ctx, camera, galaxy, w, h, explored);
 
   if (rangeOverlay) {
     renderRangeOverlay(ctx, camera, galaxy, rangeOverlay.empireId, rangeOverlay.rangeParsec);
@@ -141,11 +154,28 @@ export function render(canvas, galaxy, camera, selectedSystemId, rangeOverlay) {
 
   // Sternensysteme
   for (const system of galaxy.systems) {
+    if (visible && !visible.has(system.id)) continue;
+    const isExplored = !explored || explored.has(system.id);
+
     const p = worldToScreen(camera, system.x, system.y);
     if (p.x < -30 || p.y < -30 || p.x > w + 30 || p.y > h + 30) continue;
 
     const star = getStarType(system.star);
     const radius = STAR_RADIUS_BASE * Math.max(0.6, Math.min(1.6, camera.zoom));
+
+    // Unerforschte, aber sichtbare Nachbarsysteme (Sternenstraßen-Kontakt
+    // ohne eigenen Besuch): nur Position/Sternfarbe, keine Details
+    // (Besitzer-Ring, Orion-Markierung, Planetenzahl, Name).
+    if (!isExplored) {
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = FOG_STAR_COLOR;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
 
     const ownerId = system.planets.find((p) => p.colonizedBy !== null && p.colonizedBy !== undefined)?.colonizedBy;
     if (ownerId !== undefined) {
@@ -203,14 +233,18 @@ export function render(canvas, galaxy, camera, selectedSystemId, rangeOverlay) {
     }
   }
 
-  renderFleets(ctx, galaxy, camera);
+  renderFleets(ctx, galaxy, camera, visible);
 }
 
 function fleetShipCount(fleet) {
   return fleet.stacks.reduce((sum, s) => sum + s.count, 0);
 }
 
-function renderFleets(ctx, galaxy, camera) {
+// Nebel des Krieges (ROADMAP v0.15): fremde Flotten nur zeigen, wenn ihr
+// aktueller Standort (bzw. bei Reisenden Start- oder Zielsystem der
+// aktuellen Etappe) für den Spieler sichtbar ist. Eigene Flotten stehen
+// ohnehin immer in bereits erforschten Systemen.
+function renderFleets(ctx, galaxy, camera, visible) {
   if (!galaxy.fleets) return;
   const bySystem = new Map();
 
@@ -222,6 +256,7 @@ function renderFleets(ctx, galaxy, camera) {
       const origin = galaxy.systems.find((s) => s.id === (fleet.originSystemId ?? fleet.systemId));
       const destination = galaxy.systems.find((s) => s.id === fleet.destinationSystemId);
       if (!origin || !destination) continue;
+      if (visible && !visible.has(origin.id) && !visible.has(destination.id)) continue;
       const t = 1 - Math.max(0, fleet.travelRemaining) / Math.max(1, fleet.travelTotal);
       const wx = origin.x + (destination.x - origin.x) * t;
       const wy = origin.y + (destination.y - origin.y) * t;
@@ -249,6 +284,7 @@ function renderFleets(ctx, galaxy, camera) {
       ctx.fill();
       ctx.restore();
     } else {
+      if (visible && !visible.has(fleet.systemId)) continue;
       const list = bySystem.get(fleet.systemId) ?? [];
       list.push({ fleet, color });
       bySystem.set(fleet.systemId, list);
@@ -280,11 +316,14 @@ function renderFleets(ctx, galaxy, camera) {
 
 export function pickSystemAt(canvas, galaxy, camera, screenX, screenY) {
   if (!galaxy) return null;
+  const playerEmpire = galaxy.empires?.find((e) => e.isPlayer);
+  const visible = playerEmpire ? getExploredAndVisible(galaxy, playerEmpire.id).visible : null;
   const world = screenToWorld(camera, screenX, screenY);
   const hitRadiusWorld = 14 / camera.zoom;
   let closest = null;
   let closestDist = Infinity;
   for (const system of galaxy.systems) {
+    if (visible && !visible.has(system.id)) continue;
     const dx = system.x - world.x;
     const dy = system.y - world.y;
     const dist = Math.sqrt(dx * dx + dy * dy);

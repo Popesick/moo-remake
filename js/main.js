@@ -112,9 +112,21 @@ const panelCallbacks = {
     flashTopbar("Flotten zusammengelegt.");
   },
   onArmFleetMove(fleetId) {
+    // Ein manueller Zielbefehl beendet die Auto-Erkundung dieser Flotte,
+    // damit der nächste Auto-Erkundungs-Zug den manuellen Befehl nicht
+    // sofort wieder überschreibt.
+    const fleet = gameState.galaxy.fleets.find((f) => f.id === fleetId);
+    if (fleet) fleet.autoExplore = false;
     gameState.pendingFleetMove = fleetId;
     flashTopbar("Zielsystem auf der Karte anklicken … (erreichbare Systeme markiert)");
     requestRender();
+  },
+  onToggleAutoExplore(fleetId) {
+    const fleet = gameState.galaxy.fleets.find((f) => f.id === fleetId);
+    if (!fleet) return;
+    fleet.autoExplore = !fleet.autoExplore;
+    refreshSidePanel();
+    saveGame();
   },
   onInvade(systemId, planetId, troopsRequested) {
     const galaxy = gameState.galaxy;
