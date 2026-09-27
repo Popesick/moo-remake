@@ -1,7 +1,9 @@
 import { generateGalaxy, findSystem } from "./galaxyGen.js";
 import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
 import { render, pickSystemAt, fitGalaxyToView, centerCameraOnPoint } from "./render.js";
-import { simulateTurn, colonizePlanet, computePlanetProduction } from "./economy.js";
+import { simulateTurn, colonizePlanet, computePlanetProduction, applyBattleResult, resolvePendingBattleAuto } from "./economy.js";
+import { createBattle, moveUnitTo, attackWithUnit, endPlayerPhase, retreat, finalizeBattleResult } from "./hexcombat.js";
+import { renderHexCombat, resetHexCombatSelection } from "./renderHexCombat.js";
 import { normalizeSliders } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
@@ -48,6 +50,8 @@ import {
   renderHallOfFame,
   openHallOfFameDialog,
   closeHallOfFameDialog,
+  openHexCombatDialog,
+  closeHexCombatDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -333,6 +337,119 @@ const diplomacyCallbacks = {
   },
 };
 
+// Interaktives Kampf-Grid (ROADMAP v0.16): galaxy.pendingBattles sammelt die
+// Gefechte, die simulateTurn (js/economy.js) wegen der aktivierten
+// Einstellung zurückgestellt hat. Die Runde gilt erst als abgeschlossen
+// (Kampfbericht/Durchbrüche/Ankünfte anzeigen), wenn diese Warteschlange
+// leer ist – jedes Gefecht wird nacheinander im Kampf-Grid oder per
+// Auto-Auflösung entschieden.
+function openNextPendingBattle() {
+  const galaxy = gameState.galaxy;
+  const pending = galaxy.pendingBattles ?? [];
+  if (pending.length === 0) {
+    const ctx = gameState.turnEndContext;
+    const reports = gameState.turnEndBattleReports ?? [];
+    gameState.turnEndContext = null;
+    gameState.turnEndBattleReports = null;
+    gameState.activeBattle = null;
+    closeHexCombatDialog();
+    if (ctx) finishTurnDisplay(ctx.playerEmpire, reports, ctx.breakthroughsByEmpire, ctx.arrivals, ctx.galacticEvent);
+    return;
+  }
+
+  const next = pending[0];
+  const player = getPlayerEmpire();
+  const battle = createBattle(galaxy, next.systemId, player.id);
+  if (!battle) {
+    // Mehr als zwei Parteien am System oder Spieler nicht mehr beteiligt
+    // (z.B. Flotte inzwischen abgezogen) -> automatisch auflösen.
+    const result = resolvePendingBattleAuto(galaxy, next.systemId);
+    galaxy.pendingBattles = pending.slice(1);
+    if (result) gameState.turnEndBattleReports = [...(gameState.turnEndBattleReports ?? []), result];
+    openNextPendingBattle();
+    return;
+  }
+
+  resetHexCombatSelection();
+  gameState.activeBattle = battle;
+  // Dialog zuerst sichtbar machen: das Canvas hat als Kind eines noch
+  // versteckten [hidden]-Overlays clientWidth/clientHeight=0, sonst würde
+  // renderHexCombat mit einer falschen Notfall-Auflösung zeichnen, die beim
+  // Sichtbarwerden verzerrt gestreckt erscheint.
+  openHexCombatDialog();
+  renderHexCombat(battle, galaxy, hexCombatCallbacks);
+}
+
+function finishActiveBattle(report) {
+  const galaxy = gameState.galaxy;
+  const systemId = gameState.activeBattle.systemId;
+  if (report) gameState.turnEndBattleReports = [...(gameState.turnEndBattleReports ?? []), report];
+  galaxy.pendingBattles = (galaxy.pendingBattles ?? []).filter((p) => p.systemId !== systemId);
+  gameState.activeBattle = null;
+  updateTopbarInfo(galaxy);
+  refreshSidePanel();
+  requestRender();
+  saveGame();
+  openNextPendingBattle();
+}
+
+const hexCombatCallbacks = {
+  onMove(unitId, col, row) {
+    const battle = gameState.activeBattle;
+    const result = moveUnitTo(battle, unitId, col, row);
+    if (!result.ok) {
+      if (result.reason) flashHexCombatStatus(result.reason);
+      return;
+    }
+    renderHexCombat(battle, gameState.galaxy, hexCombatCallbacks);
+  },
+  onAttack(attackerId, targetId) {
+    const battle = gameState.activeBattle;
+    const result = attackWithUnit(battle, attackerId, targetId);
+    if (!result.ok) {
+      if (result.reason) flashHexCombatStatus(result.reason);
+      return;
+    }
+    if (battle.finished) {
+      finishActiveBattle(applyBattleResult(gameState.galaxy, battle.systemId, finalizeBattleResult(battle)));
+    } else {
+      renderHexCombat(battle, gameState.galaxy, hexCombatCallbacks);
+    }
+  },
+  onEndPhase() {
+    const battle = gameState.activeBattle;
+    endPlayerPhase(battle);
+    if (battle.finished) {
+      finishActiveBattle(applyBattleResult(gameState.galaxy, battle.systemId, finalizeBattleResult(battle)));
+    } else {
+      renderHexCombat(battle, gameState.galaxy, hexCombatCallbacks);
+    }
+  },
+  onRetreat() {
+    const battle = gameState.activeBattle;
+    if (!window.confirm("Verbliebene Flotte aus dem Gefecht zurückziehen?")) return;
+    retreat(battle, getPlayerEmpire().id);
+    finishActiveBattle(applyBattleResult(gameState.galaxy, battle.systemId, finalizeBattleResult(battle)));
+  },
+  onAutoResolve() {
+    const battle = gameState.activeBattle;
+    finishActiveBattle(resolvePendingBattleAuto(gameState.galaxy, battle.systemId));
+  },
+};
+
+// Fasst den Rundenabschluss zusammen, sobald keine offenen Kampf-Grid-Gefechte
+// mehr anstehen: entweder sofort (klassische Auto-Auflösung, keine
+// Interaktion nötig) oder nach Abarbeiten der Warteschlange oben.
+function proceedToBattlesOrFinish(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent) {
+  if (gameState.galaxy.pendingBattles?.length > 0) {
+    gameState.turnEndContext = { playerEmpire, breakthroughsByEmpire, arrivals, galacticEvent };
+    gameState.turnEndBattleReports = [...battleReports];
+    openNextPendingBattle();
+    return;
+  }
+  finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent);
+}
+
 function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent) {
   const playerBattles = battleReports.filter((r) => r.empireIds.includes(playerEmpire.id));
   if (playerBattles.length > 0) {
@@ -393,12 +510,27 @@ const councilCallbacks = {
       flashTopbar("Galaktischer Rat: keine Mehrheit erreicht.");
     }
 
-    finishTurnDisplay(playerEmpire, pending.battleReports, pending.breakthroughsByEmpire, pending.arrivals, pending.galacticEvent);
+    proceedToBattlesOrFinish(playerEmpire, pending.battleReports, pending.breakthroughsByEmpire, pending.arrivals, pending.galacticEvent);
   },
 };
 
 function endTurn() {
   if (!gameState.galaxy) return;
+
+  // Offene Kampf-Grid-Gefechte (ROADMAP v0.16) blockieren den eigentlichen
+  // Rundenwechsel, bis sie entschieden sind (z.B. nach einem Neuladen mit
+  // noch unerledigtem galaxy.pendingBattles) – einfach das Kampf-Grid für
+  // das nächste offene Gefecht erneut öffnen statt eine neue Runde zu
+  // simulieren.
+  if (gameState.galaxy.pendingBattles?.length > 0) {
+    if (!gameState.turnEndContext) {
+      gameState.turnEndContext = { playerEmpire: getPlayerEmpire(), breakthroughsByEmpire: new Map(), arrivals: [], galacticEvent: null };
+      gameState.turnEndBattleReports = [];
+    }
+    openNextPendingBattle();
+    return;
+  }
+
   const { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote, galacticEvent } = simulateTurn(gameState.galaxy);
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
@@ -421,7 +553,7 @@ function endTurn() {
     return;
   }
 
-  finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent);
+  proceedToBattlesOrFinish(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent);
 }
 
 function setupCanvasInteractions() {
@@ -504,7 +636,10 @@ function setupCanvasInteractions() {
     { passive: false }
   );
 
-  window.addEventListener("resize", requestRender);
+  window.addEventListener("resize", () => {
+    requestRender();
+    if (gameState.activeBattle) renderHexCombat(gameState.activeBattle, gameState.galaxy, hexCombatCallbacks);
+  });
 }
 
 function setupDialogAndButtons() {
@@ -533,6 +668,17 @@ function setupDialogAndButtons() {
   document.getElementById("shipdesign-close").addEventListener("click", closeShipDesignDialog);
 
   document.getElementById("battle-close").addEventListener("click", closeBattleDialog);
+
+  document.getElementById("chk-interactive-combat").addEventListener("change", (e) => {
+    const player = getPlayerEmpire();
+    if (!player) return;
+    player.interactiveCombat = e.target.checked;
+    saveGame();
+  });
+
+  document.getElementById("hexcombat-endphase").addEventListener("click", () => hexCombatCallbacks.onEndPhase());
+  document.getElementById("hexcombat-retreat").addEventListener("click", () => hexCombatCallbacks.onRetreat());
+  document.getElementById("hexcombat-autoresolve").addEventListener("click", () => hexCombatCallbacks.onAutoResolve());
 
   document.getElementById("btn-diplomacy").addEventListener("click", () => {
     if (!gameState.galaxy) return;
@@ -578,6 +724,27 @@ function flashTopbar(message) {
   }, 2500);
 }
 
+// Rückmeldungen zu ungültigen Kampf-Grid-Aktionen (z.B. "außerhalb der
+// Waffenreichweite") müssen INS Dialogfeld selbst – flashTopbar würde die
+// Meldung hinter dem vollflächigen Kampf-Grid-Overlay verstecken.
+let hexCombatFlashTimeout = null;
+function flashHexCombatStatus(message) {
+  const el = document.getElementById("hexcombat-status");
+  el.textContent = message;
+  clearTimeout(hexCombatFlashTimeout);
+  hexCombatFlashTimeout = setTimeout(() => {
+    if (gameState.activeBattle) renderHexCombat(gameState.activeBattle, gameState.galaxy, hexCombatCallbacks);
+  }, 2000);
+}
+
+// Spiegelt den (nicht in localStorage separat, sondern am Spielerimperium
+// gespeicherten) Interaktive-Kämpfe-Schalter in die Checkbox, z.B. nach dem
+// Laden eines Spielstands oder einer neuen Galaxie.
+function syncInteractiveCombatCheckbox() {
+  const player = getPlayerEmpire();
+  document.getElementById("chk-interactive-combat").checked = Boolean(player?.interactiveCombat);
+}
+
 function init() {
   setupCanvasInteractions();
   setupDialogAndButtons();
@@ -589,8 +756,18 @@ function init() {
     updateTopbarInfo(gameState.galaxy);
     refreshSidePanel();
     requestRender();
+    syncInteractiveCombatCheckbox();
+    // Ein beim letzten Speichern noch unerledigtes Kampf-Grid-Gefecht
+    // (ROADMAP v0.16) sofort wieder anbieten, statt die Runde stillschweigend
+    // weiterlaufen zu lassen.
+    if (gameState.galaxy.pendingBattles?.length > 0) {
+      gameState.turnEndContext = { playerEmpire: getPlayerEmpire(), breakthroughsByEmpire: new Map(), arrivals: [], galacticEvent: null };
+      gameState.turnEndBattleReports = [];
+      openNextPendingBattle();
+    }
   } else {
     startNewGalaxy({ sizeId: "medium", empireCount: 3, seed: "" });
+    syncInteractiveCombatCheckbox();
   }
 }
 

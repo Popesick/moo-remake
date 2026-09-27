@@ -13,6 +13,10 @@
       <div id="topbar-info"></div>
       <div id="topbar-stats"></div>
       <div id="topbar-actions">
+        <label id="interactive-combat-toggle" class="topbar-checkbox" title="Eigene Gefechte selbst auf einem Hexfeld-Kampf-Grid führen, statt sie automatisch auszuwürfeln.">
+          <input type="checkbox" id="chk-interactive-combat" />
+          Interaktive Kämpfe
+        </label>
         <button id="btn-research">Forschung</button>
         <button id="btn-shipdesign">Schiffsdesign</button>
         <button id="btn-diplomacy">Diplomatie &amp; Spionage</button>
@@ -176,6 +180,22 @@
         <div id="battle-report"></div>
         <div class="dialog-actions">
           <button id="battle-close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="hexcombat-dialog" class="dialog-overlay" hidden>
+      <div class="dialog dialog-fullscreen">
+        <h2>Taktisches Gefecht</h2>
+        <p id="hexcombat-status" class="dialog-hint"></p>
+        <div id="hexcombat-body">
+          <canvas id="hexcombat-canvas"></canvas>
+          <div id="hexcombat-log" class="battle-log"></div>
+        </div>
+        <div class="dialog-actions">
+          <button id="hexcombat-retreat">Zurückziehen</button>
+          <button id="hexcombat-autoresolve">Automatisch auflösen</button>
+          <button id="hexcombat-endphase">Runde beenden</button>
         </div>
       </div>
     </div>

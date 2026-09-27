@@ -668,6 +668,14 @@ export function closeBattleDialog() {
   document.getElementById("battle-dialog").hidden = true;
 }
 
+export function openHexCombatDialog() {
+  document.getElementById("hexcombat-dialog").hidden = false;
+}
+
+export function closeHexCombatDialog() {
+  document.getElementById("hexcombat-dialog").hidden = true;
+}
+
 export function renderDiplomacyDialog(galaxy, callbacks) {
   const player = galaxy.empires.find((e) => e.isPlayer);
   if (!player) return;

@@ -392,10 +392,83 @@ spielbar von der Kolonisierung bis zum Sieg.
   sind nicht wählbar) und plant nur eine Runde im Voraus statt eine
   vollständige Route vorzuberechnen.
 
+- **v0.16 – Interaktives Kampf-Grid (Hexfeld-Taktik)**
+  Optionale Alternative zur bisherigen statistischen Auto-Auflösung
+  (`js/combat.js` `resolveSystemCombat`), auf Nutzerwunsch: ein neuer Schalter
+  "Interaktive Kämpfe" in der Kopfleiste (`empire.interactiveCombat`,
+  standardmäßig AUS) lässt den Spieler eigene Gefechte selbst auf einem
+  Hexfeld führen, wie in einem klassischen Rundenstrategiespiel – Flotten
+  gezielt bewegen und angreifen statt nur zuzusehen.
+
+  **Ablauf**: `js/economy.js` `resolveAllCombats` erkennt beim Rundenwechsel
+  Zwei-Parteien-Gefechte, an denen der Spieler beteiligt ist, und stellt sie
+  bei aktiviertem Schalter zurück (`galaxy.pendingBattles`) statt sie sofort
+  auszuwürfeln – die beteiligten Flotten bleiben bis zur Entscheidung
+  unverändert am System stehen. `js/main.js` blockiert den weiteren
+  Rundenwechsel, bis alle zurückgestellten Gefechte entschieden sind, und
+  öffnet dafür das neue Kampf-Grid (`hexcombat-dialog`). Das Ergebnis
+  mündet über dieselbe Form (`{ empireIds, winnerEmpireId, survivorsByEmpire,
+  shipsLostByEmpire, log }`) wie die Auto-Auflösung in denselben
+  Flotten-Wiederaufbau und denselben Kampfbericht-Dialog wie bisher – aus
+  Sicht des restlichen Spiels ist ein Kampf-Grid-Ergebnis nicht von einem
+  automatisch aufgelösten zu unterscheiden.
+
+  **Mechanik** (neues Modul `js/hexcombat.js`): jeder Flotten-Stack (ein
+  Design, alle Schiffe eines Imperiums an diesem System) belegt genau ein
+  Hexfeld auf einem 11×7-Grid (Odd-Q-Offset-Koordinaten). Jede Einheit darf
+  pro Runde einmal ziehen (Bewegungsreichweite aus Antriebsgeschwindigkeit
+  und Rumpf-Ausweichbonus) und einmal angreifen (nur Waffen mit
+  ausreichender Reichweite feuern); Treffer landen immer auf dem vordersten
+  noch lebenden Schiff des Ziel-Stacks. Die Spielerphase endet über
+  "Runde beenden", woraufhin eine einfache KI-Heuristik (nächstes Ziel
+  anvisieren, bei Bedarf annähern, feuern sobald in Reichweite) die
+  gegnerischen Einheiten zieht. "Zurückziehen" beendet das Gefecht sofort
+  zugunsten des Gegners, die eigenen Überlebenden fliehen mit ihrem
+  aktuellen Zustand. "Automatisch auflösen" ist jederzeit verfügbar und
+  verwirft einen begonnenen manuellen Verlauf zugunsten der klassischen
+  Zufallsauflösung auf Basis des ursprünglichen (unbeschädigten)
+  Kräfteverhältnisses – die zweite, feinere Ebene der "optional"-Vorgabe
+  neben dem globalen Schalter.
+
+  Treffer-/Schadensmathematik pro Schuss (`hitChance`, `missileHitChance`,
+  `rollDamage`, `defenseRating`) ist aus `js/combat.js` in den Kampf-Grid-Code
+  wiederverwendet, damit beide Auflösungsarten konsistent bleiben; neu ist
+  nur `weaponRangeHexes` (Feuerreichweite in Hexfeldern, siehe unten).
+
+  **Nachbesserung** (beim Testen dieses Release gefunden, nicht erst durch
+  das Kampf-Grid verursacht): die Flotten-Wiederaufbau-Logik nach einem
+  Gefecht hat bisher JEDE Flotte am umkämpften System gelöscht und nur aus
+  den Kampf-Überlebenden neu aufgebaut – ein Kolonieschiff (nimmt laut
+  ROADMAP v0.14 nie am Kampf teil) in derselben Flotte wie kämpfende
+  Kriegsschiffe wurde dadurch unabhängig vom Kampfausgang mit zerstört.
+  `js/economy.js` `applyBattleResult` (aus der bisherigen
+  `resolveAllCombats` herausgezogen, jetzt auch vom Kampf-Grid genutzt)
+  entfernt jetzt nur noch die kampfbeteiligten Design-Stacks und erhält
+  alle übrigen (Kolonieschiff-)Stacks einer betroffenen Flotte.
+
+  SAVE_VERSION auf 13 erhöht (neue Felder `empire.interactiveCombat`,
+  `galaxy.pendingBattles`). *Vereinfacht:* nur Zwei-Parteien-Gefechte sind
+  interaktiv spielbar, ein Zusammentreffen von drei oder mehr Imperien am
+  selben System läuft weiterhin automatisch; Guardian-of-Orion- und
+  galaktische Zufallsereignis-Kämpfe (`js/orion.js`, `js/events.js`) bleiben
+  vorerst ebenfalls Auto-Resolve-only. Ein Hexfeld trägt einen ganzen
+  Stack statt eines einzelnen Schiffs. Feuerreichweite ist in keiner
+  Analyse-Quelle beziffert (außer dem Disruptor, siehe techtree-analyse.docx)
+  – Platzhalter: 3 Hexfelder für Direktfeuerwaffen, 5 für Raketen/Torpedos.
+  Bewegungsreichweite ist ebenfalls unbeziffert – Platzhalter aus halbierter
+  Antriebsgeschwindigkeit plus Rumpf-Ausweichbonus. Die zahlreichen, im
+  Techbaum als "(ab v0.5)" markierten Spezialfähigkeiten (Flächenschaden,
+  Tarnung, Stasisfeld, Verdrängung, Teleport-Vorrang, Schadenskontrolle
+  usw.) sind bewusst noch nicht umgesetzt – nur Waffen, Schilde,
+  Geschwindigkeit und Angriffs-/ECM-Boni wirken bereits über die gemeinsame
+  Kampfmathematik.
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidaten: interaktives Kampf-Grid statt Auto-Resolve, KI-Redesign
-  neuer Schiffsklassen im Spielverlauf, Beam-Distanzabfall
+- Polish-Kandidaten: KI-Redesign neuer Schiffsklassen im Spielverlauf,
+  Beam-Distanzabfall über die im interaktiven Kampf-Grid (v0.16) bereits
+  eingeführte Reichweite hinaus, die im Techbaum als "(ab v0.5)" markierten
+  Spezialfähigkeiten (Flächenschaden, Tarnung, Stasisfeld usw.)
 
 ## Grafik-Pipeline
 

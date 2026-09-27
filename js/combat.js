@@ -1,6 +1,6 @@
 import { computeDesignStats } from "./shipDesign.js";
 
-const MAX_ROUNDS = 30;
+export const MAX_ROUNDS = 30;
 // Sigmoid-Trefferformel aus design-analyse.docx: bei Attack=Defense 50%,
 // bei Differenz ±30 ca. 21%/79%. k so gewählt, dass diese Eckwerte passen.
 const HIT_CURVE_K = 0.044;
@@ -10,32 +10,51 @@ const HIT_CURVE_K = 0.044;
 const BASE_ATTACK_RATING = 10;
 const MISSILE_BASE_HIT_CHANCE = 0.95;
 const MISSILE_ECM_REDUCTION_PER_POINT = 0.05; // ECM Jammer Mark N: -N*5%, siehe techtree-analyse.docx
+const DEFAULT_BEAM_RANGE_HEXES = 3;
+const DEFAULT_MISSILE_RANGE_HEXES = 5;
 
 // Verteidigungswert = Kampfgeschwindigkeit × 5 (Antriebstech) + fester
 // Rumpf-Ausweichbonus (Small +2, Medium +1), siehe docs/shipklassen-analyse.docx.
-function defenseRating(unit) {
+// Exportiert, da auch js/hexcombat.js (ROADMAP v0.16, interaktives
+// Kampf-Grid) dieselbe Treffer-/Schadensmathematik pro Schuss wiederverwendet.
+export function defenseRating(unit) {
   return unit.speed * 5 + unit.hullEvasionBonus;
 }
 
-function missileHitChance(target) {
+export function missileHitChance(target) {
   return Math.max(0.1, MISSILE_BASE_HIT_CHANCE - target.ecmDefense * MISSILE_ECM_REDUCTION_PER_POINT);
 }
 
-function hitChance(attack, defense) {
+export function hitChance(attack, defense) {
   const diff = attack - defense;
   return 1 / (1 + Math.exp(-HIT_CURVE_K * diff));
 }
 
-function rollDamage(weaponTech, targetMaxHp) {
+export function rollDamage(weaponTech, targetMaxHp) {
   const m = weaponTech.module;
   if (m.percentTargetHP) return Math.round(targetMaxHp * m.percentTargetHP);
   if (m.dmgMin === m.dmgMax) return m.dmgMin;
   return m.dmgMin + Math.floor(Math.random() * (m.dmgMax - m.dmgMin + 1));
 }
 
+export function attackRatingFor(empire) {
+  return BASE_ATTACK_RATING + (empire?.attackBonus ?? 0);
+}
+
+// Feuerreichweite im interaktiven Kampf-Grid (ROADMAP v0.16): nur der
+// Disruptor beziffert im Techbaum eine eigene Basisreichweite (2), alle
+// übrigen Waffen sind in keiner Analyse-Quelle reichweitenbeziffert.
+// Plausibler, hier zentral tunbarer Platzhalter: 3 Hexfelder für
+// Direktfeuerwaffen, 5 für gelenkte Raketen/Torpedos. Ohne Bedeutung für
+// die statistische Auto-Auflösung unten (kein Positionsbegriff).
+export function weaponRangeHexes(tech) {
+  if (tech.module.range) return tech.module.range;
+  return tech.module.isMissile ? DEFAULT_MISSILE_RANGE_HEXES : DEFAULT_BEAM_RANGE_HEXES;
+}
+
 function buildUnits(fleets, empireId, empire) {
   const shipDesigns = empire?.shipDesigns ?? [];
-  const attackRating = BASE_ATTACK_RATING + (empire?.attackBonus ?? 0);
+  const attackRating = attackRatingFor(empire);
   const ecmDefense = empire?.ecmDefense ?? 0;
   const units = [];
   let uid = 0;

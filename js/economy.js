@@ -83,6 +83,11 @@ export function initEmpireEconomy(empire, seed, difficultyId = "normal") {
     growthRateMultiplier: traits.growthRateMultiplier ?? 1,
     instantColonization: traits.instantColonization ?? false,
     pollutionImmune: traits.pollutionImmune ?? false,
+    // Interaktives Kampf-Grid (ROADMAP v0.16): standardmäßig aus, damit die
+    // vertraute Auto-Auflösung erhalten bleibt, bis der Spieler es bewusst
+    // einschaltet. Nur beim Spielerimperium ausgewertet (siehe
+    // js/economy.js resolveAllCombats) – KI-Imperien kämpfen immer statistisch.
+    interactiveCombat: false,
   };
   const { research, initialBreakthroughs } = initEmpireResearch(seed, empire.id, empire.raceId);
   base.research = research;
@@ -245,7 +250,13 @@ export function simulateTurn(galaxy) {
   // als erforscht markieren, bevor Kampfberichte/Events etc. darauf Bezug
   // nehmen.
   updateExploredSystems(galaxy);
-  const battleReports = resolveAllCombats(galaxy);
+  const { reports: battleReports, pendingBattles } = resolveAllCombats(galaxy);
+  // Interaktives Kampf-Grid (ROADMAP v0.16): Gefechte, an denen der Spieler
+  // beteiligt ist, werden bei aktivierter Einstellung hier NICHT aufgelöst,
+  // sondern eingefroren an galaxy.pendingBattles gemeldet – js/main.js öffnet
+  // dafür das Kampf-Grid und lässt die Runde erst weiterlaufen, sobald alle
+  // gemeldeten Gefechte aufgelöst wurden (manuell oder per Auto-Auflösung).
+  galaxy.pendingBattles = pendingBattles;
 
   // Guardian of Orion (ROADMAP v0.10): unabhängig vom Diplomatiestatus, da
   // der Guardian an keiner Diplomatie teilnimmt.
@@ -284,11 +295,74 @@ export function simulateTurn(galaxy) {
   };
 }
 
+// Baut die an einem Kampf beteiligten Flotten aus den Überlebenden neu auf
+// und trägt die Kill-Zuordnung für den Highscore ein (ROADMAP v0.11) – von
+// resolveAllCombats für sofort aufgelöste Gefechte genutzt, und von
+// js/main.js für ein zuvor an galaxy.pendingBattles zurückgestelltes,
+// interaktiv (Kampf-Grid, ROADMAP v0.16) oder nachträglich automatisch
+// aufgelöstes Gefecht.
+export function applyBattleResult(galaxy, systemId, result) {
+  // Kolonieschiff-Stacks (kein reguläres Design, siehe COLONY_SHIP_DESIGN_ID)
+  // nehmen nie am Kampf teil (js/combat.js buildUnits überspringt sie) und
+  // müssen daher unabhängig vom Kampfausgang erhalten bleiben – auch wenn
+  // sie in derselben Flotte standen wie kämpfende Kriegsschiffe. Ohne diese
+  // Sonderbehandlung würde die blanke Flotten-Neuaufbau-Logik unten sie mit
+  // löschen, obwohl sie am Gefecht gar nicht beteiligt waren.
+  const empireIdsInBattle = new Set(result.empireIds);
+  const survivingNonCombatFleets = [];
+  for (const fleet of galaxy.fleets) {
+    if (fleet.systemId !== systemId || fleet.destinationSystemId || !empireIdsInBattle.has(fleet.ownerEmpireId)) continue;
+    const empire = galaxy.empires.find((e) => e.id === fleet.ownerEmpireId);
+    const nonCombatStacks = fleet.stacks.filter((s) => !empire?.shipDesigns.some((d) => d.id === s.designId));
+    if (nonCombatStacks.length > 0) survivingNonCombatFleets.push({ ...fleet, stacks: nonCombatStacks });
+  }
+
+  galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === systemId && !f.destinationSystemId));
+  galaxy.fleets.push(...survivingNonCombatFleets);
+
+  for (const [empireId, stacks] of result.survivorsByEmpire) {
+    if (stacks.length === 0) continue;
+    galaxy.fleets.push({
+      id: `fleet-${galaxy.nextFleetId++}`,
+      ownerEmpireId: empireId,
+      systemId,
+      destinationSystemId: null,
+      stacks,
+    });
+  }
+
+  if (result.winnerEmpireId !== null) {
+    galaxy.lastDamagedBy = galaxy.lastDamagedBy ?? {};
+    for (const id of result.empireIds) {
+      if (id !== result.winnerEmpireId) galaxy.lastDamagedBy[id] = result.winnerEmpireId;
+    }
+  }
+
+  return { systemId, ...result };
+}
+
+// Löst ein zuvor zurückgestelltes Gefecht (galaxy.pendingBattles) nachträglich
+// automatisch auf – die "Automatisch auflösen"-Option im Kampf-Grid
+// (ROADMAP v0.16). Die beteiligten Flotten sind bis dahin unverändert am
+// System eingefroren, siehe resolveAllCombats.
+export function resolvePendingBattleAuto(galaxy, systemId) {
+  const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
+  const result = resolveSystemCombat(fleetsHere, galaxy.empires);
+  if (!result) return null;
+  return applyBattleResult(galaxy, systemId, result);
+}
+
 // Löst an jedem System, an dem stationäre Flotten mehrerer Imperien
 // aufeinandertreffen, ein automatisches Gefecht aus (siehe js/combat.js) und
 // baut die beteiligten Flotten anschließend aus den Überlebenden neu auf.
+// Interaktives Kampf-Grid (ROADMAP v0.16): ist es beim Spieler aktiviert und
+// er selbst an einem Zwei-Parteien-Gefecht beteiligt, wird dessen Auflösung
+// zurückgestellt (pendingBattles) statt sofort per Zufallsformel entschieden
+// – die beteiligten Flotten bleiben bis dahin unverändert am System stehen.
 function resolveAllCombats(galaxy) {
   const reports = [];
+  const pendingBattles = [];
+  const player = galaxy.empires.find((e) => e.isPlayer);
   const systemIds = new Set(
     galaxy.fleets.filter((f) => !f.destinationSystemId).map((f) => f.systemId)
   );
@@ -311,37 +385,18 @@ function resolveAllCombats(galaxy) {
     }
     if (!allAtWar) continue;
 
+    if (player?.interactiveCombat && empireIds.length === 2 && empireIds.includes(player.id)) {
+      pendingBattles.push({ systemId, empireIds });
+      continue;
+    }
+
     const result = resolveSystemCombat(fleetsHere, galaxy.empires);
     if (!result) continue;
 
-    galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === systemId && !f.destinationSystemId));
-
-    for (const [empireId, stacks] of result.survivorsByEmpire) {
-      if (stacks.length === 0) continue;
-      galaxy.fleets.push({
-        id: `fleet-${galaxy.nextFleetId++}`,
-        ownerEmpireId: empireId,
-        systemId,
-        destinationSystemId: null,
-        stacks,
-      });
-    }
-
-    // Kill-Zuordnung für den Highscore (ROADMAP v0.11): bei entscheidendem
-    // Ausgang gilt der Sieger als letzter Angreifer der Verlierer – wird bei
-    // deren Elimination für den +50-Punkte-Bonus ausgewertet, siehe
-    // js/victory.js checkGameEnd/computeScore.
-    if (result.winnerEmpireId !== null) {
-      galaxy.lastDamagedBy = galaxy.lastDamagedBy ?? {};
-      for (const id of result.empireIds) {
-        if (id !== result.winnerEmpireId) galaxy.lastDamagedBy[id] = result.winnerEmpireId;
-      }
-    }
-
-    reports.push({ systemId, ...result });
+    reports.push(applyBattleResult(galaxy, systemId, result));
   }
 
-  return reports;
+  return { reports, pendingBattles };
 }
 
 export function colonizePlanet(galaxy, systemId, planetId, empireId) {

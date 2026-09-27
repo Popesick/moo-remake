@@ -64,6 +64,16 @@ html, body {
   border-color: var(--accent);
 }
 
+.topbar-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .planet-owner {
   display: inline-flex;
   align-items: center;
@@ -270,6 +280,38 @@ button:hover {
   width: 520px;
   max-height: 80vh;
   overflow-y: auto;
+}
+
+.dialog-fullscreen {
+  width: min(96vw, 1200px);
+  height: 90vh;
+  max-height: 90vh;
+}
+
+#hexcombat-body {
+  display: flex;
+  gap: 0.8rem;
+  flex: 1;
+  min-height: 0;
+}
+
+#hexcombat-canvas {
+  flex: 1;
+  min-width: 0;
+  background: #05070f;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#hexcombat-log {
+  width: 260px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: #10182c;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.6rem;
 }
 
 .dialog-hint {
