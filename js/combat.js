@@ -12,6 +12,16 @@ const MISSILE_BASE_HIT_CHANCE = 0.95;
 const MISSILE_ECM_REDUCTION_PER_POINT = 0.05; // ECM Jammer Mark N: -N*5%, siehe techtree-analyse.docx
 const DEFAULT_BEAM_RANGE_HEXES = 3;
 const DEFAULT_MISSILE_RANGE_HEXES = 5;
+// Bislang wirkungslose Techbaum-Technologie ("High Energy Focus", Stufe 34,
+// Antrieb: "+3 Feuerreichweite für Direktfeuerwaffen (ab v0.5)") – wird ab
+// ROADMAP v0.18 erstmals ausgewertet, siehe rangeBonusForEmpire unten.
+export const HIGH_ENERGY_FOCUS_TECH_ID = "prop_high_energy_focus";
+const HIGH_ENERGY_FOCUS_RANGE_BONUS = 3;
+// Beam-Distanzabfall im interaktiven Kampf-Grid (ROADMAP v0.18): keine
+// Analyse-Quelle beziffert einen konkreten Abfallwert; plausibler,
+// zentral tunbarer Platzhalter, der Direktfeuerwaffen bei maximaler
+// Reichweite auf die Hälfte ihres Schadens absinken lässt.
+const BEAM_FALLOFF_FLOOR = 0.5;
 
 // Verteidigungswert = Kampfgeschwindigkeit × 5 (Antriebstech) + fester
 // Rumpf-Ausweichbonus (Small +2, Medium +1), siehe docs/shipklassen-analyse.docx.
@@ -47,9 +57,26 @@ export function attackRatingFor(empire) {
 // Plausibler, hier zentral tunbarer Platzhalter: 3 Hexfelder für
 // Direktfeuerwaffen, 5 für gelenkte Raketen/Torpedos. Ohne Bedeutung für
 // die statistische Auto-Auflösung unten (kein Positionsbegriff).
-export function weaponRangeHexes(tech) {
-  if (tech.module.range) return tech.module.range;
-  return tech.module.isMissile ? DEFAULT_MISSILE_RANGE_HEXES : DEFAULT_BEAM_RANGE_HEXES;
+// rangeBonus (ROADMAP v0.18, siehe rangeBonusForEmpire) gilt nur für
+// Direktfeuerwaffen – Raketen/Torpedos sind bereits mit voller
+// Basisreichweite gelenkt und profitieren nicht zusätzlich davon.
+export function weaponRangeHexes(tech, rangeBonus = 0) {
+  const base = tech.module.range ?? (tech.module.isMissile ? DEFAULT_MISSILE_RANGE_HEXES : DEFAULT_BEAM_RANGE_HEXES);
+  return tech.module.isMissile ? base : base + rangeBonus;
+}
+
+export function rangeBonusForEmpire(empire) {
+  return empire?.research?.completedTechs?.includes(HIGH_ENERGY_FOCUS_TECH_ID) ? HIGH_ENERGY_FOCUS_RANGE_BONUS : 0;
+}
+
+// Direktfeuerwaffen verlieren linear bis zu die Hälfte ihres Schadens
+// zwischen Distanz 1 (voller Schaden) und ihrer maximalen Reichweite
+// (BEAM_FALLOFF_FLOOR); gelenkte Raketen/Torpedos (isMissile) treffen
+// distanzunabhängig mit voller Wirkung.
+export function rangeDamageMultiplier(tech, distance, maxRange) {
+  if (tech.module.isMissile || maxRange <= 1) return 1;
+  const t = Math.min(1, Math.max(0, (distance - 1) / (maxRange - 1)));
+  return 1 - t * (1 - BEAM_FALLOFF_FLOOR);
 }
 
 function buildUnits(fleets, empireId, empire) {

@@ -510,12 +510,44 @@ spielbar von der Kolonisierung bis zum Sieg.
   Partieende in `shipDesigns` stehen statt bei völligem Verschwinden aller
   ihrer Schiffe automatisch aufgeräumt zu werden.
 
+- **v0.18 – Beam-Distanzabfall & Feuerreichweiten-Technologie**
+  Baut auf der im interaktiven Kampf-Grid (v0.16) eingeführten Reichweite
+  auf: Direktfeuerwaffen (Strahlen/Kanonen, alles außer `isMissile`)
+  verlieren jetzt linear an Wirkung, je weiter das Ziel entfernt ist –
+  voller Schaden auf Distanz 1, absinkend auf 50% bei maximaler
+  Waffenreichweite (`js/combat.js` `rangeDamageMultiplier`, in
+  `js/hexcombat.js` `resolveAttack` auf den gewürfelten Schaden vor dem
+  Schildabzug angewendet). Gelenkte Raketen/Torpedos (`isMissile`) treffen
+  weiterhin distanzunabhängig mit voller Stärke. Gilt ausschließlich für
+  das Kampf-Grid – die statistische Auto-Auflösung bleibt wie in ROADMAP
+  v0.14 dokumentiert ohne Positionsbegriff.
+
+  Zugleich wird die bislang wirkungslose Techbaum-Technologie "High Energy
+  Focus" (Antrieb, Stufe 34: "+3 Feuerreichweite für Direktfeuerwaffen (ab
+  v0.5)") erstmals ausgewertet: `js/combat.js` `rangeBonusForEmpire` prüft
+  `empire.research.completedTechs` und reicht den Bonus als `rangeBonus` an
+  jede Kampf-Grid-Einheit weiter (`js/hexcombat.js` `createBattle`,
+  einmalig pro Imperium statt bei jeder Reichweitenprüfung erneut
+  nachgeschlagen). Rakete/Torpedos profitieren nicht zusätzlich davon, da
+  sie bereits mit voller Basisreichweite gelenkt sind.
+
+  Verifiziert: Schadensvergleich über 200 Gefechte je Distanz bestätigt die
+  erwartete ~50%-Halbierung zwischen Distanz 1 und maximaler Reichweite;
+  ein Ziel außerhalb der Basisreichweite ist ohne die Technologie
+  unerreichbar und mit ihr treffbar; 150-Runden-Regression mit
+  abwechselnd manuell gespieltem und automatisch aufgelöstem Kampf-Grid
+  ohne Fehler.
+
+  *Vereinfacht:* der Abfallwert (50% Minimum) ist ein plausibler,
+  zentral tunbarer Platzhalter – keine Analyse-Quelle beziffert einen
+  konkreten Wert; der Bonus gilt pauschal für alle Direktfeuerwaffen eines
+  Imperiums, nicht gestaffelt nach Waffentyp.
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidaten: Beam-Distanzabfall über die im interaktiven Kampf-Grid
-  (v0.16) bereits eingeführte Reichweite hinaus, die im Techbaum als
-  "(ab v0.5)" markierten Spezialfähigkeiten (Flächenschaden, Tarnung,
-  Stasisfeld usw.)
+- Polish-Kandidaten: die im Techbaum als "(ab v0.5)" markierten übrigen
+  Spezialfähigkeiten (Flächenschaden, Tarnung, Stasisfeld, Verdrängung,
+  Teleport-Vorrang, Schadenskontrolle usw.)
 
 ## Grafik-Pipeline
 

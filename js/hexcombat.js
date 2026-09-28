@@ -14,9 +14,10 @@
 // auf das "vorderste" Schiff des Ziel-Stacks. Die zahlreichen
 // Spezialfähigkeiten aus dem Techbaum, die im Techtree als "(ab v0.5)"
 // markiert sind (Flächenschaden, Tarnung, Verdrängung, Stasisfeld,
-// Teleport-Vorrang usw.), sind bewusst noch nicht umgesetzt – nur Waffen,
-// Schilde, Geschwindigkeit und Angriffs-/ECM-Boni wirken bereits über die
-// gemeinsame Kampfmathematik.
+// Teleport-Vorrang usw.), sind bewusst noch nicht umgesetzt – Waffen,
+// Schilde, Geschwindigkeit, Angriffs-/ECM-Boni, Feuerreichweite (inkl.
+// High-Energy-Focus-Bonus) und Beam-Distanzabfall (ROADMAP v0.18) wirken
+// bereits über die gemeinsame Kampfmathematik.
 import { computeDesignStats } from "./shipDesign.js";
 import {
   hitChance,
@@ -25,6 +26,8 @@ import {
   defenseRating,
   attackRatingFor,
   weaponRangeHexes,
+  rangeBonusForEmpire,
+  rangeDamageMultiplier,
   MAX_ROUNDS,
 } from "./combat.js";
 
@@ -117,7 +120,7 @@ export function reachableTiles(battle, unit) {
 
 export function attackableTargets(battle, unit) {
   if (!unit || unit.hasActed || unit.count <= 0) return [];
-  const maxRange = Math.max(0, ...unit.weapons.map((w) => weaponRangeHexes(w.tech)));
+  const maxRange = Math.max(0, ...unit.weapons.map((w) => weaponRangeHexes(w.tech, unit.rangeBonus)));
   return battle.units.filter(
     (u) => u.count > 0 && u.empireId !== unit.empireId && hexDistance(unit, u) <= maxRange
   );
@@ -142,6 +145,10 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
   for (const empireId of empireIds) {
     const empire = galaxy.empires.find((e) => e.id === empireId);
     const attackRating = attackRatingFor(empire);
+    // Feuerreichweitenbonus durch High Energy Focus (ROADMAP v0.18) einmal
+    // pro Imperium ermittelt und an jede seiner Einheiten weitergereicht,
+    // statt bei jeder Reichweitenprüfung erneut das Imperium nachzuschlagen.
+    const rangeBonus = rangeBonusForEmpire(empire);
     const byDesign = new Map();
     for (const fleet of fleetsHere.filter((f) => f.ownerEmpireId === empireId)) {
       for (const stack of fleet.stacks) {
@@ -173,6 +180,7 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
         attackRating,
         ecmDefense: empire.ecmDefense ?? 0,
         weapons: stats.weaponLines,
+        rangeBonus,
         moveRange: tacticalMoveRange(stats),
         col: homeCol,
         row: Math.min(GRID_ROWS - 1, startRow + idx),
@@ -213,10 +221,14 @@ function checkBattleEnd(battle) {
 // aktuelle Distanz abdeckt) – dieselbe Treffer-/Schadenslogik pro Schuss wie
 // js/combat.js runBattleRounds, nur auf Stack- statt Einzelschiff-Ebene:
 // Schaden trifft immer das vorderste noch lebende Schiff des Ziel-Stacks.
+// Beam-Distanzabfall (ROADMAP v0.18): Direktfeuerwaffen verlieren an
+// Wirkung, je weiter das Ziel entfernt ist (rangeDamageMultiplier),
+// gelenkte Raketen/Torpedos treffen distanzunabhängig mit voller Stärke.
 function resolveAttack(battle, attacker, target, dist) {
   for (const line of attacker.weapons) {
     const tech = line.tech;
-    if (weaponRangeHexes(tech) < dist) continue;
+    const range = weaponRangeHexes(tech, attacker.rangeBonus);
+    if (range < dist) continue;
     if (tech.module.everyOtherTurn && battle.round % 2 === 0) continue;
 
     const totalShots = (tech.module.shots ?? 1) * line.count * attacker.count;
@@ -227,7 +239,7 @@ function resolveAttack(battle, attacker, target, dist) {
         : Math.random() < hitChance(attacker.attackRating, defenseRating(target));
       if (!hit) continue;
 
-      let dmg = rollDamage(tech, target.maxHp);
+      let dmg = Math.round(rollDamage(tech, target.maxHp) * rangeDamageMultiplier(tech, dist, range));
       if (!tech.module.ignoresShields) {
         let shield = target.shield;
         if (tech.module.shieldHalving) shield = Math.floor(shield / 2);
@@ -269,7 +281,7 @@ export function attackWithUnit(battle, attackerId, targetId) {
   }
   if (attacker.empireId === target.empireId) return { ok: false, reason: "Kein gültiges Ziel." };
   const dist = hexDistance(attacker, target);
-  if (!attacker.weapons.some((w) => weaponRangeHexes(w.tech) >= dist)) {
+  if (!attacker.weapons.some((w) => weaponRangeHexes(w.tech, attacker.rangeBonus) >= dist)) {
     return { ok: false, reason: "Ziel außerhalb der Waffenreichweite." };
   }
   resolveAttack(battle, attacker, target, dist);
@@ -320,7 +332,7 @@ function runAiPhase(battle) {
       }
     }
 
-    const maxRange = Math.max(0, ...unit.weapons.map((w) => weaponRangeHexes(w.tech)));
+    const maxRange = Math.max(0, ...unit.weapons.map((w) => weaponRangeHexes(w.tech, unit.rangeBonus)));
     if (bestDist > maxRange) {
       moveTowards(battle, unit, target);
       bestDist = hexDistance(unit, target);
