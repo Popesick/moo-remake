@@ -11,13 +11,15 @@
 // System läuft weiterhin automatisch. Ein Hexfeld trägt genau einen
 // Flotten-Stack (alle Schiffe eines Designs eines Imperiums an diesem
 // System), nicht ein einzelnes Schiff – Treffer verteilen sich daher immer
-// auf das "vorderste" Schiff des Ziel-Stacks. Die zahlreichen
-// Spezialfähigkeiten aus dem Techbaum, die im Techtree als "(ab v0.5)"
-// markiert sind (Flächenschaden, Tarnung, Verdrängung, Stasisfeld,
-// Teleport-Vorrang usw.), sind bewusst noch nicht umgesetzt – Waffen,
-// Schilde, Geschwindigkeit, Angriffs-/ECM-Boni, Feuerreichweite (inkl.
-// High-Energy-Focus-Bonus) und Beam-Distanzabfall (ROADMAP v0.18) wirken
-// bereits über die gemeinsame Kampfmathematik.
+// auf das "vorderste" Schiff des Ziel-Stacks.
+//
+// Alle im Techtree als "(ab v0.5)" markierten Spezialfähigkeiten (ROADMAP
+// v0.19) sind jetzt umgesetzt, siehe Abschnitt "Spezialfähigkeiten" unten:
+// Waffen, Schilde, Geschwindigkeit, Angriffs-/ECM-Boni, Feuerreichweite
+// (inkl. High-Energy-Focus-Bonus) und Beam-Distanzabfall (ROADMAP v0.18)
+// wirken bereits über die gemeinsame Kampfmathematik; die restlichen
+// Fähigkeiten werden hier als Boni/Effekte auf die Kampf-Grid-Einheiten
+// angewendet.
 import { computeDesignStats } from "./shipDesign.js";
 import {
   hitChance,
@@ -87,6 +89,110 @@ function inBounds(col, row) {
   return col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS;
 }
 
+// ---------------------------------------------------------------------
+// Spezialfähigkeiten (ROADMAP v0.19): alle im Techbaum als "(ab v0.5)"
+// markierten Kampf-Technologien, die zuvor `effect: { type: "flavor" }`
+// waren (reines Textversprechen ohne Wirkung). Battle-Computer-/ECM-Stufen
+// sowie alle Deflector-Schild-Klassen wirkten bereits vorher (über
+// `applyTechEffect`/das Schiffsdesign-Modulsystem) und sind hier nicht
+// erneut aufgeführt. Für jede Fähigkeit gilt: keine Analyse-Quelle
+// beziffert ihre genaue Kampf-Grid-Wirkung – Werte/Formeln sind plausible,
+// hier zentral tunbare Platzhalter, die den Techtree-Beschreibungstext so
+// direkt wie im Rahmen des bestehenden Kampf-Grids möglich umsetzen.
+const ABILITY_TECH = {
+  battleScanner: "comp_battle_scanner",
+  oracle: "comp_oracle",
+  techNullifier: "comp_tech_nullifier",
+  damageControl: "constr_damage_control",
+  repulsor: "ff_repulsor",
+  cloaking: "ff_cloaking",
+  zyro: "ff_zyro",
+  stasis: "ff_stasis",
+  blackHole: "ff_black_hole",
+  lightning: "ff_lightning",
+  inertialStabilizer: "prop_inertial_stabilizer",
+  energyPulsar: "prop_energy_pulsar",
+  warpDissipator: "prop_warp_dissipator",
+  subspaceTeleporter: "prop_subspace_teleporter",
+  ionicPulsar: "prop_ionic_pulsar",
+  subspaceInterdictor: "prop_subspace_interdictor",
+  inertialNullifier: "prop_inertial_nullifier",
+  displacement: "prop_displacement",
+};
+
+const TECH_NULLIFIER_MIN = 2;
+const TECH_NULLIFIER_MAX = 6;
+const DAMAGE_CONTROL_REGEN_FRACTION = 0.3;
+const CLOAKING_EVASION_BONUS = 20;
+const INERTIAL_STABILIZER_EVASION_BONUS = 2;
+const INERTIAL_NULLIFIER_EVASION_BONUS = 4;
+const INERTIAL_NULLIFIER_MOVE_BONUS = 2;
+const WARP_DISSIPATOR_EVASION_PENALTY = 2;
+const TELEPORTER_MOVE_RANGE = GRID_COLS + GRID_ROWS; // "frei" = jedes Feld in einem Zug erreichbar
+const DISPLACEMENT_DODGE_CHANCE = 0.33;
+const BLACK_HOLE_MIN_FRACTION = 0.25;
+const BLACK_HOLE_MAX_FRACTION = 1.0;
+
+function hasTech(empire, techId) {
+  return empire?.research?.completedTechs?.includes(techId) ?? false;
+}
+
+// Fasst alle Spezialfähigkeits-Boni für ein Imperium in diesem Gefecht
+// zusammen (einmal pro Imperium berechnet, siehe createBattle) –
+// ownsSystem steuert Sub Space Interdictor (wirkt nur über eigenen
+// Kolonien).
+function computeAbilities(empire, ownsSystem) {
+  const evasionBonus =
+    (hasTech(empire, ABILITY_TECH.inertialNullifier)
+      ? INERTIAL_NULLIFIER_EVASION_BONUS
+      : hasTech(empire, ABILITY_TECH.inertialStabilizer)
+        ? INERTIAL_STABILIZER_EVASION_BONUS
+        : 0) + (hasTech(empire, ABILITY_TECH.cloaking) ? CLOAKING_EVASION_BONUS : 0);
+
+  const missileDefenseChance = hasTech(empire, ABILITY_TECH.lightning)
+    ? 1
+    : hasTech(empire, ABILITY_TECH.zyro)
+      ? 0.75
+      : 0;
+
+  const splashDamage = hasTech(empire, ABILITY_TECH.ionicPulsar)
+    ? 10
+    : hasTech(empire, ABILITY_TECH.energyPulsar)
+      ? 5
+      : 0;
+
+  // Stasisfeld und Schwarzes-Loch-Generator sind beides "einmal pro Kampf
+  // auslösbare Sondergeräte" statt regulärer Waffen (siehe
+  // maybeTriggerSpecialDevice) – ist Black Hole erforscht, ersetzt es
+  // Stasis Field als stärkeres, späteres Gerät.
+  const specialDevice = hasTech(empire, ABILITY_TECH.blackHole)
+    ? "blackHole"
+    : hasTech(empire, ABILITY_TECH.stasis)
+      ? "stasis"
+      : null;
+
+  return {
+    attackBonusFlat: hasTech(empire, ABILITY_TECH.battleScanner) ? 1 : 0,
+    hasOracle: hasTech(empire, ABILITY_TECH.oracle),
+    hasNullifier: hasTech(empire, ABILITY_TECH.techNullifier),
+    regenFraction: hasTech(empire, ABILITY_TECH.damageControl) ? DAMAGE_CONTROL_REGEN_FRACTION : 0,
+    hasRepulsor: hasTech(empire, ABILITY_TECH.repulsor),
+    evasionBonus,
+    missileDefenseChance,
+    splashDamage,
+    specialDevice,
+    moveRangeBonus: hasTech(empire, ABILITY_TECH.inertialNullifier) ? INERTIAL_NULLIFIER_MOVE_BONUS : 0,
+    hasWarpDissipator: hasTech(empire, ABILITY_TECH.warpDissipator),
+    // Roh-Wert, ob Sub Space Teleporter erforscht ist – die eigentliche
+    // "Negiert gegnerischen Sub Space Teleporter über eigenen Kolonien"-Regel
+    // braucht die Fähigkeiten BEIDER Seiten und wird erst in createBattle
+    // angewendet (siehe dort, nachdem für beide Imperien berechnet wurde).
+    hasTeleporter: hasTech(empire, ABILITY_TECH.subspaceTeleporter),
+    dodgeChance: hasTech(empire, ABILITY_TECH.displacement) ? DISPLACEMENT_DODGE_CHANCE : 0,
+    hasInterdictorAtHome: hasTech(empire, ABILITY_TECH.subspaceInterdictor) && ownsSystem,
+  };
+}
+
 // Breitensuche über die erreichbaren, unbesetzten Hexfelder innerhalb der
 // Bewegungsreichweite (keine Wegkosten je Feld, kein Gelände).
 function tilesReachable(battle, unit, range) {
@@ -114,12 +220,12 @@ function tilesReachable(battle, unit, range) {
 }
 
 export function reachableTiles(battle, unit) {
-  if (!unit || unit.hasMoved || unit.count <= 0) return [];
+  if (!unit || unit.hasMoved || unit.count <= 0 || unit.frozenRounds > 0) return [];
   return [...tilesReachable(battle, unit, unit.moveRange).keys()].map(keyToPos);
 }
 
 export function attackableTargets(battle, unit) {
-  if (!unit || unit.hasActed || unit.count <= 0) return [];
+  if (!unit || unit.hasActed || unit.count <= 0 || unit.frozenRounds > 0) return [];
   const maxRange = Math.max(0, ...unit.weapons.map((w) => weaponRangeHexes(w.tech, unit.rangeBonus)));
   return battle.units.filter(
     (u) => u.count > 0 && u.empireId !== unit.empireId && hexDistance(unit, u) <= maxRange
@@ -138,17 +244,42 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
   if (empireIds.length !== 2 || !empireIds.includes(playerEmpireId)) return null;
   const enemyEmpireId = empireIds.find((id) => id !== playerEmpireId);
 
+  const system = galaxy.systems.find((s) => s.id === systemId);
+  const abilitiesByEmpire = new Map();
+  for (const empireId of empireIds) {
+    const empire = galaxy.empires.find((e) => e.id === empireId);
+    const ownsSystem = system?.planets.some((p) => p.colonizedBy === empireId) ?? false;
+    abilitiesByEmpire.set(empireId, computeAbilities(empire, ownsSystem));
+  }
+  // Sub Space Interdictor (ROADMAP v0.19): negiert den gegnerischen Sub
+  // Space Teleporter, aber nur solange das Gefecht über einer eigenen
+  // Kolonie des Interdiktor-Besitzers stattfindet – braucht die
+  // Fähigkeiten beider Seiten, daher erst hier nach obiger Schleife
+  // aufgelöst.
+  // Warp Dissipator (ROADMAP v0.19): reduziert den Ausweichwert ALLER
+  // gegnerischen Einheiten für die Dauer des Gefechts – vereinfacht als
+  // fester Malus statt der Techtree-Formulierung "pro Runde", um die
+  // Rundenauflösung nicht mit zusätzlichem Zustand pro Einheit zu belasten.
+  for (const empireId of empireIds) {
+    const otherId = empireIds.find((id) => id !== empireId);
+    const mine = abilitiesByEmpire.get(empireId);
+    const other = abilitiesByEmpire.get(otherId);
+    mine.teleports = mine.hasTeleporter && !(other?.hasInterdictorAtHome ?? false);
+    if (other?.hasWarpDissipator) mine.evasionBonus -= WARP_DISSIPATOR_EVASION_PENALTY;
+  }
+
   const units = [];
   const startCounts = {};
   let uid = 0;
 
   for (const empireId of empireIds) {
     const empire = galaxy.empires.find((e) => e.id === empireId);
-    const attackRating = attackRatingFor(empire);
+    const attackRating = attackRatingFor(empire) + abilitiesByEmpire.get(empireId).attackBonusFlat;
     // Feuerreichweitenbonus durch High Energy Focus (ROADMAP v0.18) einmal
     // pro Imperium ermittelt und an jede seiner Einheiten weitergereicht,
     // statt bei jeder Reichweitenprüfung erneut das Imperium nachzuschlagen.
     const rangeBonus = rangeBonusForEmpire(empire);
+    const abilities = abilitiesByEmpire.get(empireId);
     const byDesign = new Map();
     for (const fleet of fleetsHere.filter((f) => f.ownerEmpireId === empireId)) {
       for (const stack of fleet.stacks) {
@@ -166,6 +297,9 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
     entries.forEach(([designId, count], idx) => {
       const design = empire.shipDesigns.find((d) => d.id === designId);
       const stats = computeDesignStats(design, empire);
+      const moveRange = abilities.teleports
+        ? TELEPORTER_MOVE_RANGE
+        : tacticalMoveRange(stats) + abilities.moveRangeBonus;
       units.push({
         id: `u${uid++}`,
         empireId,
@@ -176,16 +310,27 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
         maxHp: stats.hp,
         shield: stats.shieldAbsorption,
         speed: stats.speed,
-        hullEvasionBonus: stats.hullEvasionBonus + (empire.maneuverBonus ?? 0),
+        hullEvasionBonus: stats.hullEvasionBonus + (empire.maneuverBonus ?? 0) + abilities.evasionBonus,
         attackRating,
         ecmDefense: empire.ecmDefense ?? 0,
         weapons: stats.weaponLines,
         rangeBonus,
-        moveRange: tacticalMoveRange(stats),
+        moveRange,
         col: homeCol,
         row: Math.min(GRID_ROWS - 1, startRow + idx),
         hasMoved: false,
         hasActed: false,
+        // Spezialfähigkeiten (ROADMAP v0.19), siehe computeAbilities oben.
+        hasOracle: abilities.hasOracle,
+        hasNullifier: abilities.hasNullifier,
+        hasRepulsor: abilities.hasRepulsor,
+        regenFraction: abilities.regenFraction,
+        missileDefenseChance: abilities.missileDefenseChance,
+        splashDamage: abilities.splashDamage,
+        dodgeChance: abilities.dodgeChance,
+        specialDevice: abilities.specialDevice,
+        usedSpecial: false,
+        frozenRounds: 0,
       });
     });
   }
@@ -224,7 +369,69 @@ function checkBattleEnd(battle) {
 // Beam-Distanzabfall (ROADMAP v0.18): Direktfeuerwaffen verlieren an
 // Wirkung, je weiter das Ziel entfernt ist (rangeDamageMultiplier),
 // gelenkte Raketen/Torpedos treffen distanzunabhängig mit voller Stärke.
+function killShipsInStack(battle, attacker, target, techName, n) {
+  const kills = Math.min(n, target.count);
+  target.shipHp.splice(0, kills);
+  target.count -= kills;
+  if (kills > 0) {
+    battle.log.push(
+      `Runde ${battle.round}: ${attacker.designName} (Imperium ${attacker.empireId}) zerstört ${kills}x ${target.designName} (Imperium ${target.empireId}) mit ${techName}.`
+    );
+  }
+}
+
+// Flächenschaden (ROADMAP v0.19, Energy/Ionic Pulsar): trifft nach einem
+// erfolgreichen Treffer zusätzlich alle gegnerischen Einheiten in
+// unmittelbarer Nachbarschaft des Ziels mit fixem Schaden (ignoriert
+// Schilde – die Techtree-Beschreibung nennt reinen "Flächenschaden" ohne
+// Schildbezug).
+function applySplashDamage(battle, attacker, primaryTarget, amount) {
+  const neighborKeys = new Set(neighborsOf(primaryTarget.col, primaryTarget.row).map((p) => key(p.col, p.row)));
+  for (const u of battle.units) {
+    if (u.count <= 0 || u.id === primaryTarget.id || u.empireId === attacker.empireId) continue;
+    if (!neighborKeys.has(key(u.col, u.row))) continue;
+    u.shipHp[0] -= amount;
+    if (u.shipHp[0] <= 0) killShipsInStack(battle, attacker, u, "Flächenschaden", 1);
+  }
+}
+
+// Repulsor Beam (ROADMAP v0.19): stößt das getroffene Ziel ein Feld weiter
+// vom Angreifer weg, sofern ein freies Nachbarfeld in dieser Richtung
+// existiert – rein positionelle Wirkung, kein zusätzlicher Schaden.
+function applyRepulsorPush(battle, attacker, target) {
+  const occupied = new Set(battle.units.filter((u) => u.count > 0 && u.id !== target.id).map((u) => key(u.col, u.row)));
+  let best = null;
+  let bestDist = hexDistance(attacker, target);
+  for (const n of neighborsOf(target.col, target.row)) {
+    if (!inBounds(n.col, n.row) || occupied.has(key(n.col, n.row))) continue;
+    const d = hexDistance(attacker, n);
+    if (d > bestDist) {
+      bestDist = d;
+      best = n;
+    }
+  }
+  if (best) {
+    target.col = best.col;
+    target.row = best.row;
+  }
+}
+
+// Löst einen Angriff auf (alle Waffen des Angreifers, deren Reichweite die
+// aktuelle Distanz abdeckt) – dieselbe Treffer-/Schadenslogik pro Schuss wie
+// js/combat.js runBattleRounds, nur auf Stack- statt Einzelschiff-Ebene:
+// Schaden trifft immer das vorderste noch lebende Schiff des Ziel-Stacks.
+// Beam-Distanzabfall (ROADMAP v0.18): Direktfeuerwaffen verlieren an
+// Wirkung, je weiter das Ziel entfernt ist (rangeDamageMultiplier),
+// gelenkte Raketen/Torpedos treffen distanzunabhängig mit voller Stärke.
+// Spezialfähigkeiten (ROADMAP v0.19): Zyro/Lightning-Schild
+// (missileDefenseChance) kann eine Rakete vor dem Einschlag zerstören,
+// Displacement Device (dodgeChance) lässt jeden Treffer unabhängig von der
+// Trefferchance verfehlen, Oracle Interface lässt Direktfeuerwaffen des
+// Angreifers Schilde ignorieren, Technology Nullifier senkt bei Treffer den
+// Angriffswert des Ziels dauerhaft, Repulsor/Flächenschaden wirken nach
+// einem erfolgreichen Treffer.
 function resolveAttack(battle, attacker, target, dist) {
+  let anyHit = false;
   for (const line of attacker.weapons) {
     const tech = line.tech;
     const range = weaponRangeHexes(tech, attacker.rangeBonus);
@@ -234,18 +441,33 @@ function resolveAttack(battle, attacker, target, dist) {
     const totalShots = (tech.module.shots ?? 1) * line.count * attacker.count;
     for (let s = 0; s < totalShots; s++) {
       if (target.count <= 0) break;
+
+      if (tech.module.isMissile && target.missileDefenseChance > 0 && Math.random() < target.missileDefenseChance) {
+        continue; // Zyro/Lightning Shield: Rakete vor Einschlag zerstört.
+      }
+      if (target.dodgeChance > 0 && Math.random() < target.dodgeChance) {
+        continue; // Displacement Device: Angriff verfehlt automatisch.
+      }
+
       const hit = tech.module.isMissile
         ? Math.random() < missileHitChance(target)
         : Math.random() < hitChance(attacker.attackRating, defenseRating(target));
       if (!hit) continue;
 
       let dmg = Math.round(rollDamage(tech, target.maxHp) * rangeDamageMultiplier(tech, dist, range));
-      if (!tech.module.ignoresShields) {
+      const bypassShields = tech.module.ignoresShields || (attacker.hasOracle && !tech.module.isMissile);
+      if (!bypassShields) {
         let shield = target.shield;
         if (tech.module.shieldHalving) shield = Math.floor(shield / 2);
         dmg = Math.max(0, dmg - shield);
       }
+
+      if (attacker.hasNullifier) {
+        target.attackRating = Math.max(1, target.attackRating - (TECH_NULLIFIER_MIN + Math.floor(Math.random() * (TECH_NULLIFIER_MAX - TECH_NULLIFIER_MIN + 1))));
+      }
+
       if (dmg <= 0) continue;
+      anyHit = true;
 
       target.shipHp[0] -= dmg;
       if (target.shipHp[0] <= 0) {
@@ -254,16 +476,54 @@ function resolveAttack(battle, attacker, target, dist) {
         battle.log.push(
           `Runde ${battle.round}: ${attacker.designName} (Imperium ${attacker.empireId}) zerstört ${target.designName} (Imperium ${target.empireId}) mit ${tech.name}.`
         );
-        if (target.count <= 0) break;
       }
+      if (target.count > 0 && attacker.hasRepulsor) applyRepulsorPush(battle, attacker, target);
+      if (target.count <= 0) break;
     }
     if (target.count <= 0) break;
   }
+  // Flächenschaden (Energy/Ionic Pulsar) ist ein eigenständiges Gerät, das
+  // einmal pro Angriffsaktion auslöst – nicht pro Einzelschuss, sonst wären
+  // Mehrfachschuss-Waffen (Gatling Laser, Scatter Pack, ...) absurd stark.
+  if (anyHit && attacker.splashDamage > 0) applySplashDamage(battle, attacker, target, attacker.splashDamage);
+}
+
+// Stasis Field / Black Hole Generator (ROADMAP v0.19): je Einheit einmal
+// pro Gefecht auslösbares Sondergerät statt regulärem Waffenfeuer – wird
+// automatisch beim ersten Angriff dieser Einheit statt der üblichen
+// Waffenauflösung ausgelöst (*Vereinfacht*: keine eigene UI-Auswahl, ob es
+// diesmal eingesetzt werden soll). Black Hole ersetzt Stasis Field, falls
+// beide erforscht sind (siehe computeAbilities). Gibt true zurück, wenn der
+// Angriff dadurch bereits vollständig abgehandelt wurde.
+function maybeTriggerSpecialDevice(battle, attacker, target) {
+  if (!attacker.specialDevice || attacker.usedSpecial) return false;
+  attacker.usedSpecial = true;
+
+  if (attacker.specialDevice === "stasis") {
+    target.frozenRounds = Math.max(target.frozenRounds, 1);
+    battle.log.push(
+      `Runde ${battle.round}: ${attacker.designName} (Imperium ${attacker.empireId}) hält ${target.designName} (Imperium ${target.empireId}) mit einem Stasisfeld fest.`
+    );
+    return true;
+  }
+
+  // Black Hole Generator: zerstört 25-100% der Schiffe des Ziels und aller
+  // gegnerischen Einheiten in Nachbarfeldern (Wirkungsbereich).
+  const fraction = BLACK_HOLE_MIN_FRACTION + Math.random() * (BLACK_HOLE_MAX_FRACTION - BLACK_HOLE_MIN_FRACTION);
+  const affected = [target, ...battle.units.filter((u) => {
+    if (u.count <= 0 || u.id === target.id || u.empireId === attacker.empireId) return false;
+    return hexDistance(target, u) <= 1;
+  })];
+  for (const u of affected) {
+    killShipsInStack(battle, attacker, u, "Schwarzes-Loch-Generator", Math.ceil(u.count * fraction));
+  }
+  return true;
 }
 
 export function moveUnitTo(battle, unitId, col, row) {
   const unit = battle.units.find((u) => u.id === unitId);
   if (!unit || unit.hasMoved || unit.count <= 0) return { ok: false, reason: "Zug bereits verbraucht." };
+  if (unit.frozenRounds > 0) return { ok: false, reason: "Von einem Stasisfeld festgehalten." };
   if (!reachableTiles(battle, unit).some((p) => p.col === col && p.row === row)) {
     return { ok: false, reason: "Außerhalb der Bewegungsreichweite." };
   }
@@ -279,12 +539,15 @@ export function attackWithUnit(battle, attackerId, targetId) {
   if (!attacker || !target || attacker.hasActed || attacker.count <= 0 || target.count <= 0) {
     return { ok: false, reason: "Angriff nicht möglich." };
   }
+  if (attacker.frozenRounds > 0) return { ok: false, reason: "Von einem Stasisfeld festgehalten." };
   if (attacker.empireId === target.empireId) return { ok: false, reason: "Kein gültiges Ziel." };
   const dist = hexDistance(attacker, target);
   if (!attacker.weapons.some((w) => weaponRangeHexes(w.tech, attacker.rangeBonus) >= dist)) {
     return { ok: false, reason: "Ziel außerhalb der Waffenreichweite." };
   }
-  resolveAttack(battle, attacker, target, dist);
+  if (!maybeTriggerSpecialDevice(battle, attacker, target)) {
+    resolveAttack(battle, attacker, target, dist);
+  }
   attacker.hasActed = true;
   checkBattleEnd(battle);
   return { ok: true };
@@ -318,7 +581,7 @@ function moveTowards(battle, unit, target) {
 function runAiPhase(battle) {
   const aiUnits = battle.units.filter((u) => u.empireId === battle.enemyEmpireId && u.count > 0);
   for (const unit of aiUnits) {
-    if (battle.finished || unit.count <= 0) continue;
+    if (battle.finished || unit.count <= 0 || unit.frozenRounds > 0) continue;
     const enemies = battle.units.filter((u) => u.empireId === battle.playerEmpireId && u.count > 0);
     if (enemies.length === 0) break;
 
@@ -338,14 +601,18 @@ function runAiPhase(battle) {
       bestDist = hexDistance(unit, target);
     }
     if (bestDist <= maxRange) {
-      resolveAttack(battle, unit, target, bestDist);
+      if (!maybeTriggerSpecialDevice(battle, unit, target)) {
+        resolveAttack(battle, unit, target, bestDist);
+      }
     }
   }
 }
 
 // Beendet die Spielerphase: KI zieht/feuert, danach beginnt (sofern das
 // Gefecht nicht bereits entschieden ist) die nächste Runde mit
-// zurückgesetzten Zug-/Angriffsmarkierungen.
+// zurückgesetzten Zug-/Angriffsmarkierungen. Advanced Damage Control
+// (ROADMAP v0.19) heilt hier alle Schiffe mit dieser Technologie, und
+// eingefrorene Stasisfeld-Ziele zählen eine Runde herunter.
 export function endPlayerPhase(battle) {
   if (battle.finished) return;
   runAiPhase(battle);
@@ -361,6 +628,12 @@ export function endPlayerPhase(battle) {
   for (const u of battle.units) {
     u.hasMoved = false;
     u.hasActed = false;
+    if (u.frozenRounds > 0) u.frozenRounds -= 1;
+    if (u.regenFraction > 0 && u.count > 0) {
+      for (let i = 0; i < u.shipHp.length; i++) {
+        u.shipHp[i] = Math.min(u.maxHp, u.shipHp[i] + Math.round(u.maxHp * u.regenFraction));
+      }
+    }
   }
 }
 

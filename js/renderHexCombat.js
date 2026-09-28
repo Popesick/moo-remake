@@ -173,12 +173,23 @@ export function renderHexCombat(battle, galaxy, callbacks) {
     const ringColor = isTargetable ? "#ff5b5b" : isSelected ? "#ffffff" : null;
     drawHex(ctx, x, y, currentHexSize * 0.94, null, ringColor);
 
-    ctx.globalAlpha = unit.hasMoved && unit.hasActed ? 0.5 : 1;
+    const isFrozen = unit.frozenRounds > 0;
+    ctx.globalAlpha = isFrozen || (unit.hasMoved && unit.hasActed) ? 0.5 : 1;
     ctx.beginPath();
     ctx.fillStyle = color;
     ctx.arc(x, y, currentHexSize * 0.4, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
+
+    // Stasisfeld (ROADMAP v0.19): eingefrorene Einheiten können weder
+    // ziehen noch angreifen, bis frozenRounds abgelaufen ist.
+    if (isFrozen) {
+      ctx.strokeStyle = "#5bd7ff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, currentHexSize * 0.55, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     ctx.fillStyle = "#05070f";
     ctx.font = "bold 11px sans-serif";

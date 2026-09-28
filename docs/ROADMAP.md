@@ -543,11 +543,67 @@ spielbar von der Kolonisierung bis zum Sieg.
   konkreten Wert; der Bonus gilt pauschal für alle Direktfeuerwaffen eines
   Imperiums, nicht gestaffelt nach Waffentyp.
 
+- **v0.19 – Kampf-Grid-Spezialfähigkeiten (verbliebene "(ab v0.5)"-Techs)**
+  Alle bis dahin verbliebenen, als `effect: { type: "flavor" }` wirkungslosen
+  Techbaum-Technologien wirken jetzt im interaktiven Kampf-Grid
+  (`js/hexcombat.js`, neuer Abschnitt "Spezialfähigkeiten", `computeAbilities`
+  einmal pro Imperium bei Gefechtsbeginn ausgewertet). Battle-Computer-/
+  ECM-Jammer-Stufen und alle Deflector-Schild-Klassen funktionierten dagegen
+  bereits vorher (über `applyTechEffect` bzw. das Schiffsdesign-Modulsystem)
+  – ihr irreführender "(ab v0.5)"-Beschreibungstext wurde entfernt, ebenso
+  bei allen hier neu umgesetzten Technologien.
+
+  Umgesetzt: **Battle Scanner** (+1 Angriffswert), **Oracle Interface**
+  (Direktfeuerwaffen ignorieren Schilde), **Technology Nullifier** (senkt
+  bei Treffer den Angriffswert des Ziels dauerhaft um 2-6),
+  **Advanced Damage Control** (heilt 30% der Schiffs-HP pro Runde),
+  **Repulsor Beam** (stößt getroffene Ziele ein Feld weiter weg),
+  **Cloaking Device** (+20 Ausweichwert), **Zyro-/Lightning Shield**
+  (75%/100% Chance, Raketen vor dem Einschlag zu zerstören), **Stasis
+  Field**/**Black Hole Generator** (je Einheit einmal pro Gefecht
+  auslösbares Sondergerät statt regulärem Waffenfeuer: Stasis friert ein
+  Ziel 1 Runde ein, Black Hole zerstört 25-100% aller Schiffe im
+  Wirkungsbereich – Black Hole ersetzt Stasis, falls beide erforscht sind),
+  **Inertial Stabilizer**/**Inertial Nullifier** (+2/+4 Ausweichwert, +2
+  Kampffeld-Bewegung bei Nullifier, kein Stapeln), **Energy/Ionic Pulsar**
+  (5/10 Flächenschaden an Nachbarfeldern des Ziels, einmal pro
+  Angriffsaktion statt pro Einzelschuss), **Warp Dissipator** (-2
+  Ausweichwert für alle gegnerischen Einheiten), **Sub Space Teleporter**
+  (praktisch unbegrenzte Kampffeld-Bewegung) mit **Sub Space Interdictor**
+  als Gegenmaßnahme (negiert den gegnerischen Teleporter, aber nur über
+  einer eigenen Kolonie des Interdiktor-Besitzers) und **Displacement
+  Device** (33% Chance, dass jeder gegnerische Angriff automatisch
+  verfehlt, unabhängig von der normalen Trefferchance).
+
+  Verifiziert: jede Fähigkeit einzeln über gezielte Vorher/Nachher- bzw.
+  Mehrfachversuchs-Tests (Wahrscheinlichkeiten über 300 Versuche bestätigt);
+  eine 300-Runden-Regression mit allen neu ausgewerteten Technologien
+  gleichzeitig auf beiden Kriegsparteien lief ohne Fehler.
+
+  *Vereinfacht:* keine Analyse-Quelle beziffert die genaue Kampf-Grid-
+  Wirkung dieser Fähigkeiten – alle Werte/Formeln sind plausible, zentral
+  tunbare Platzhalter, die den Techtree-Beschreibungstext so direkt wie im
+  Rahmen des bestehenden Kampf-Grids möglich umsetzen. Stasis Field/Black
+  Hole lösen automatisch beim ersten Angriff der Einheit aus (keine eigene
+  UI-Auswahl, ob das Sondergerät diesmal eingesetzt werden soll). Warp
+  Dissipator ist ein fester Malus für die Gefechtsdauer statt einer "pro
+  Runde" ansteigenden Wirkung, um keinen zusätzlichen Rundenzustand pro
+  Einheit einzuführen. Technology Nullifier wirkt pro Treffer (wie im
+  Beschreibungstext "pro Schuss") und kann bei großen Flotten-Stacks sehr
+  stark ausfallen. Gilt wie alle Kampf-Grid-Mechaniken nur für Gefechte des
+  Spielers bei aktiviertem Schalter – Guardian-of-Orion- und galaktische
+  Zufallsereignis-Kämpfe bleiben weiterhin Auto-Resolve-only.
+
+  Damit sind alle ursprünglich im Techbaum als "(ab v0.5)" markierten
+  Spezialfähigkeiten umgesetzt.
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidaten: die im Techbaum als "(ab v0.5)" markierten übrigen
-  Spezialfähigkeiten (Flächenschaden, Tarnung, Stasisfeld, Verdrängung,
-  Teleport-Vorrang, Schadenskontrolle usw.)
+- Polish-Kandidaten: KI-Nutzung der neuen Kampf-Grid-Spezialfähigkeiten
+  (die einfache KI-Heuristik aus ROADMAP v0.16 berücksichtigt bislang nur
+  Bewegung/Reichweite/Angriff, nicht gezielt Stasis/Black-Hole-Einsatz oder
+  Repulsor-Positionierung), interaktives Kampf-Grid auch für Guardian-of-
+  Orion- und galaktische Zufallsereignis-Kämpfe
 
 ## Grafik-Pipeline
 
