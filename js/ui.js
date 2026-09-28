@@ -2,7 +2,8 @@ import { getEnvironment } from "./data/environments.js";
 import { getRichness } from "./data/richness.js";
 import { getPlanetSize } from "./data/planetSizes.js";
 import { getStarType } from "./data/starTypes.js";
-import { getRace } from "./data/races.js";
+import { RACES, getRace } from "./data/races.js";
+import { iconSvg } from "./icons.js";
 import { computePlanetProduction, isColonizable, maxPopulation } from "./economy.js";
 import { DISCIPLINES } from "./data/disciplines.js";
 import { getTech } from "./data/techTree.js";
@@ -472,15 +473,17 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
   container.appendChild(section);
 }
 
+// Kopfleiste (ROADMAP v0.21): zeigt bewusst nur noch die Runde – Seed und
+// Systeme/Planeten/Imperien-Anzahl wirkten wie Debug-Ausgabe und wandern in
+// den Einstellungen-Dialog (Seed) bzw. entfallen ganz (Zählwerte).
 export function updateTopbarInfo(galaxy) {
-  const el = document.getElementById("topbar-info");
+  const el = document.getElementById("topbar-turn");
   if (!galaxy) {
     el.textContent = "Keine Galaxie geladen.";
     document.getElementById("topbar-stats").textContent = "";
     return;
   }
-  const totalPlanets = galaxy.systems.reduce((sum, s) => sum + s.planets.length, 0);
-  el.textContent = `Runde ${galaxy.turn ?? 1} · Seed ${galaxy.seed} · ${galaxy.systems.length} Systeme · ${totalPlanets} Planeten · ${galaxy.empireCount} Imperien`;
+  el.textContent = `Runde ${galaxy.turn ?? 1}`;
 
   const player = galaxy.empires?.find((e) => e.isPlayer);
   const statsEl = document.getElementById("topbar-stats");
@@ -614,7 +617,93 @@ export function readNewGameForm() {
     empireCount: Number(document.getElementById("ng-empires").value),
     difficultyId: document.getElementById("ng-difficulty").value,
     seed: document.getElementById("ng-seed").value.trim(),
+    raceId: document.getElementById("ng-race").value,
   };
+}
+
+function renderRacePreview(raceId) {
+  const race = getRace(raceId);
+  const preview = document.getElementById("race-preview");
+  if (!race) {
+    preview.innerHTML = "";
+    return;
+  }
+  preview.innerHTML = `
+    <img src="${racePortraitPath(race.id)}" alt="${race.name}" class="race-preview-portrait" />
+    <div class="race-preview-body">
+      <div class="race-preview-name" style="color:${race.color}">${race.name}</div>
+      <div class="race-preview-blurb">${race.blurb}</div>
+    </div>
+  `;
+}
+
+// Fraktionswahl im "Neue Galaxie"-Dialog (ROADMAP v0.21): Portrait-Kacheln
+// aller zehn Rassen (siehe js/data/races.js), Klick wählt sie aus (Auswahl
+// im versteckten #ng-race-Feld gemerkt, siehe readNewGameForm) und zeigt
+// Porträt + Eigenschaftstext groß in der Vorschau darunter.
+export function renderRaceSelector(selectedRaceId = "human") {
+  document.getElementById("ng-race").value = selectedRaceId;
+  const grid = document.getElementById("race-grid");
+  grid.className = "race-grid";
+  grid.innerHTML = "";
+  for (const race of RACES) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "race-chip" + (race.id === selectedRaceId ? " active" : "");
+    chip.style.setProperty("--race-color", race.color);
+    chip.innerHTML = `<img src="${racePortraitPath(race.id)}" alt="" /><span>${race.name}</span>`;
+    chip.addEventListener("click", () => renderRaceSelector(race.id));
+    grid.appendChild(chip);
+  }
+  renderRacePreview(selectedRaceId);
+}
+
+// Statische Kopfleisten-/Menü-Buttons (ROADMAP v0.21): Icon+Label einmalig
+// beim Start gesetzt (siehe js/icons.js) statt bei jedem Render neu gebaut,
+// da sich diese Buttons selbst nie ändern.
+export function renderStaticButtons() {
+  document.getElementById("btn-research").innerHTML = `${iconSvg("research")}<span>Forschung</span>`;
+  document.getElementById("btn-shipdesign").innerHTML = `${iconSvg("shipdesign")}<span>Schiffsdesign</span>`;
+  document.getElementById("btn-diplomacy").innerHTML = `${iconSvg("diplomacy")}<span>Diplomatie</span>`;
+  document.getElementById("btn-end-turn").innerHTML = `${iconSvg("endturn")}<span>Runde beenden</span>`;
+  document.getElementById("btn-home").innerHTML = iconSvg("home", 20);
+  document.getElementById("btn-halloffame").innerHTML = iconSvg("halloffame", 20);
+  document.getElementById("btn-menu").innerHTML = iconSvg("menu", 20);
+
+  document.getElementById("menu-new-game").innerHTML = `${iconSvg("newgame")}<span>Neue Galaxie</span>`;
+  document.getElementById("menu-save").innerHTML = `${iconSvg("save")}<span>Speichern</span>`;
+  document.getElementById("menu-load").innerHTML = `${iconSvg("load")}<span>Laden</span>`;
+  document.getElementById("menu-settings").innerHTML = `${iconSvg("settings")}<span>Einstellungen</span>`;
+}
+
+export function openMenuDialog() {
+  document.getElementById("menu-dialog").hidden = false;
+}
+
+export function closeMenuDialog() {
+  document.getElementById("menu-dialog").hidden = true;
+}
+
+export function openSettingsDialog() {
+  document.getElementById("settings-dialog").hidden = false;
+}
+
+export function closeSettingsDialog() {
+  document.getElementById("settings-dialog").hidden = true;
+}
+
+// Einstellungen-Dialog (ROADMAP v0.21): interaktive Kämpfe, Musik/Sound
+// (an/aus + Lautstärke, siehe js/audio.js) sowie – rein informativ, da vom
+// Spieler nicht änderbar – der Seed der aktuell geladenen Galaxie.
+export function renderSettingsDialog(settings, galaxy) {
+  document.getElementById("chk-interactive-combat").checked = settings.interactiveCombat;
+  document.getElementById("chk-music-enabled").checked = settings.musicEnabled;
+  document.getElementById("rng-music-volume").value = String(Math.round(settings.musicVolume * 100));
+  document.getElementById("chk-sfx-enabled").checked = settings.sfxEnabled;
+  document.getElementById("rng-sfx-volume").value = String(Math.round(settings.sfxVolume * 100));
+  document.getElementById("settings-music-label").innerHTML = `${iconSvg(settings.musicEnabled ? "music-on" : "music-off", 16)}<span>Musik</span>`;
+  document.getElementById("settings-sfx-label").innerHTML = `${iconSvg(settings.sfxEnabled ? "sfx-on" : "sfx-off", 16)}<span>Soundeffekte</span>`;
+  document.getElementById("settings-seed-info").textContent = galaxy ? `Seed dieser Galaxie: ${galaxy.seed}` : "Keine Galaxie geladen.";
 }
 
 export function renderBattleReports(reports, galaxy) {

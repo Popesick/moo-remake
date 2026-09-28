@@ -1,8 +1,9 @@
 // Die 10 spielbaren Fraktionen aus der Analyse ("Asymmetrisches
-// Fraktionsdesign"). In v0.2 sind nur Name/Farbe/Kurzbeschreibung aktiv;
-// die tatsächlichen Regelbrüche (siehe ROADMAP v0.6) werden erst mit den
-// KI-Verhaltensmatrizen verdrahtet. Der Spieler spielt vorerst immer die
-// Menschen (Race-Auswahl ist ein Kandidat für einen späteren Release).
+// Fraktionsdesign"). Der Spieler wählt seine Fraktion seit ROADMAP v0.21
+// selbst im "Neue Galaxie"-Dialog (siehe js/ui.js renderRaceSelector,
+// Porträts unter assets/images/races/); die tatsächlichen Regelbrüche
+// (Boni/Mali) sind seit ROADMAP v0.6 über die KI-Verhaltensmatrizen bzw.
+// js/data/raceTraits.js verdrahtet, `blurb` hier ist nur der Anzeigetext.
 export const RACES = [
   { id: "human", name: "Humans", color: "#5b9dff", blurb: "+20% Produktion durch interstellaren Handel." },
   { id: "alkari", name: "Alkari", color: "#7fe3ff", blurb: "+3 Manövrierfähigkeit im Raumkampf." },

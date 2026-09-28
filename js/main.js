@@ -1,5 +1,7 @@
 import { generateGalaxy, findSystem } from "./galaxyGen.js";
 import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
+import { loadSettings, saveSettings } from "./settings.js";
+import { initAudio, setMusicEnabled, setSfxEnabled, setMusicVolume, setSfxVolume, playMusic } from "./audio.js";
 import { render, pickSystemAt, fitGalaxyToView, centerCameraOnPoint } from "./render.js";
 import { simulateTurn, colonizePlanet, computePlanetProduction, applyBattleResult, resolvePendingBattleAuto } from "./economy.js";
 import { createBattle, moveUnitTo, attackWithUnit, endPlayerPhase, retreat, finalizeBattleResult } from "./hexcombat.js";
@@ -52,10 +54,33 @@ import {
   closeHallOfFameDialog,
   openHexCombatDialog,
   closeHexCombatDialog,
+  renderStaticButtons,
+  renderRaceSelector,
+  openMenuDialog,
+  closeMenuDialog,
+  openSettingsDialog,
+  closeSettingsDialog,
+  renderSettingsDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
 const canvas = document.getElementById("galaxy-canvas");
+
+// Persistente Client-Einstellungen (ROADMAP v0.21, js/settings.js) statt
+// eines Häkchens verstreut in der Kopfleiste – interaktive Kämpfe/Musik/
+// Soundeffekte gelten über alle Spielstände hinweg. currentSettings ist die
+// im Speicher gehaltene Kopie, die bei jeder Änderung im Einstellungen-
+// Dialog sofort übernommen und persistiert wird.
+let currentSettings = loadSettings();
+
+// Wendet den aktuellen Interaktive-Kämpfe-Schalter auf das Spielerimperium
+// an, sobald eine Galaxie geladen/gestartet wird – die Einstellung ist die
+// Quelle der Wahrheit, nicht das, was zuletzt in diesem Spielstand
+// gespeichert war.
+function applySettingsToPlayer() {
+  const player = getPlayerEmpire();
+  if (player) player.interactiveCombat = currentSettings.interactiveCombat;
+}
 
 function getEmpire(id) {
   return gameState.galaxy.empires.find((e) => e.id === id);
@@ -219,11 +244,12 @@ function goToHomeSystem() {
   selectSystem(homeSystem);
 }
 
-function startNewGalaxy({ sizeId, empireCount, difficultyId, seed }) {
-  const galaxy = generateGalaxy({ sizeId, empireCount, difficultyId, seed: seed || undefined });
+function startNewGalaxy({ sizeId, empireCount, difficultyId, seed, raceId }) {
+  const galaxy = generateGalaxy({ sizeId, empireCount, difficultyId, seed: seed || undefined, raceId });
   gameState.galaxy = galaxy;
   gameState.selectedSystemId = null;
   gameState.camera = fitGalaxyToView(canvas, galaxy);
+  applySettingsToPlayer();
   updateTopbarInfo(galaxy);
   refreshSidePanel();
   requestRender();
@@ -643,7 +669,6 @@ function setupCanvasInteractions() {
 }
 
 function setupDialogAndButtons() {
-  document.getElementById("btn-new-game").addEventListener("click", openNewGameDialog);
   document.getElementById("ng-cancel").addEventListener("click", closeNewGameDialog);
   document.getElementById("ng-confirm").addEventListener("click", () => {
     const form = readNewGameForm();
@@ -669,13 +694,6 @@ function setupDialogAndButtons() {
 
   document.getElementById("battle-close").addEventListener("click", closeBattleDialog);
 
-  document.getElementById("chk-interactive-combat").addEventListener("change", (e) => {
-    const player = getPlayerEmpire();
-    if (!player) return;
-    player.interactiveCombat = e.target.checked;
-    saveGame();
-  });
-
   document.getElementById("hexcombat-endphase").addEventListener("click", () => hexCombatCallbacks.onEndPhase());
   document.getElementById("hexcombat-retreat").addEventListener("click", () => hexCombatCallbacks.onRetreat());
   document.getElementById("hexcombat-autoresolve").addEventListener("click", () => hexCombatCallbacks.onAutoResolve());
@@ -697,14 +715,28 @@ function setupDialogAndButtons() {
 
   document.getElementById("gameend-close").addEventListener("click", closeGameEndDialog);
 
-  document.getElementById("btn-save").addEventListener("click", () => {
+  // Spielmenü (ROADMAP v0.21): bündelt Neue Galaxie/Speichern/Laden/
+  // Einstellungen, statt sie einzeln in der Kopfleiste zu verstreuen.
+  document.getElementById("btn-menu").addEventListener("click", openMenuDialog);
+  document.getElementById("menu-close").addEventListener("click", closeMenuDialog);
+
+  document.getElementById("menu-new-game").addEventListener("click", () => {
+    closeMenuDialog();
+    renderRaceSelector("human");
+    openNewGameDialog();
+  });
+
+  document.getElementById("menu-save").addEventListener("click", () => {
     const ok = saveGame();
+    closeMenuDialog();
     flashTopbar(ok ? "Gespeichert." : "Keine Galaxie zum Speichern.");
   });
 
-  document.getElementById("btn-load").addEventListener("click", () => {
+  document.getElementById("menu-load").addEventListener("click", () => {
     const ok = loadGame();
+    closeMenuDialog();
     if (ok) {
+      applySettingsToPlayer();
       updateTopbarInfo(gameState.galaxy);
       refreshSidePanel();
       requestRender();
@@ -712,11 +744,47 @@ function setupDialogAndButtons() {
       flashTopbar("Kein Speicherstand gefunden.");
     }
   });
+
+  document.getElementById("menu-settings").addEventListener("click", () => {
+    closeMenuDialog();
+    renderSettingsDialog(currentSettings, gameState.galaxy);
+    openSettingsDialog();
+  });
+  document.getElementById("settings-close").addEventListener("click", closeSettingsDialog);
+
+  document.getElementById("chk-interactive-combat").addEventListener("change", (e) => {
+    currentSettings.interactiveCombat = e.target.checked;
+    saveSettings(currentSettings);
+    applySettingsToPlayer();
+    saveGame();
+  });
+  document.getElementById("chk-music-enabled").addEventListener("change", (e) => {
+    currentSettings.musicEnabled = e.target.checked;
+    saveSettings(currentSettings);
+    setMusicEnabled(e.target.checked);
+    renderSettingsDialog(currentSettings, gameState.galaxy);
+  });
+  document.getElementById("rng-music-volume").addEventListener("input", (e) => {
+    currentSettings.musicVolume = Number(e.target.value) / 100;
+    saveSettings(currentSettings);
+    setMusicVolume(currentSettings.musicVolume);
+  });
+  document.getElementById("chk-sfx-enabled").addEventListener("change", (e) => {
+    currentSettings.sfxEnabled = e.target.checked;
+    saveSettings(currentSettings);
+    setSfxEnabled(e.target.checked);
+    renderSettingsDialog(currentSettings, gameState.galaxy);
+  });
+  document.getElementById("rng-sfx-volume").addEventListener("input", (e) => {
+    currentSettings.sfxVolume = Number(e.target.value) / 100;
+    saveSettings(currentSettings);
+    setSfxVolume(currentSettings.sfxVolume);
+  });
 }
 
 let flashTimeout = null;
 function flashTopbar(message) {
-  const el = document.getElementById("topbar-info");
+  const el = document.getElementById("topbar-turn");
   el.textContent = message;
   clearTimeout(flashTimeout);
   flashTimeout = setTimeout(() => {
@@ -737,26 +805,21 @@ function flashHexCombatStatus(message) {
   }, 2000);
 }
 
-// Spiegelt den (nicht in localStorage separat, sondern am Spielerimperium
-// gespeicherten) Interaktive-Kämpfe-Schalter in die Checkbox, z.B. nach dem
-// Laden eines Spielstands oder einer neuen Galaxie.
-function syncInteractiveCombatCheckbox() {
-  const player = getPlayerEmpire();
-  document.getElementById("chk-interactive-combat").checked = Boolean(player?.interactiveCombat);
-}
-
 function init() {
   setupCanvasInteractions();
   setupDialogAndButtons();
+  renderStaticButtons();
+  initAudio(currentSettings);
+  playMusic("theme");
 
   if (hasSavedGame() && loadGame()) {
     if (!gameState.camera || !gameState.camera.zoom) {
       gameState.camera = fitGalaxyToView(canvas, gameState.galaxy);
     }
+    applySettingsToPlayer();
     updateTopbarInfo(gameState.galaxy);
     refreshSidePanel();
     requestRender();
-    syncInteractiveCombatCheckbox();
     // Ein beim letzten Speichern noch unerledigtes Kampf-Grid-Gefecht
     // (ROADMAP v0.16) sofort wieder anbieten, statt die Runde stillschweigend
     // weiterlaufen zu lassen.
@@ -766,8 +829,7 @@ function init() {
       openNextPendingBattle();
     }
   } else {
-    startNewGalaxy({ sizeId: "medium", empireCount: 3, seed: "" });
-    syncInteractiveCombatCheckbox();
+    startNewGalaxy({ sizeId: "medium", empireCount: 3, seed: "", raceId: "human" });
   }
 }
 

@@ -634,10 +634,78 @@ spielbar von der Kolonisierung bis zum Sieg.
   selbst, wann er sein eigenes Sondergerät einsetzt (automatisch beim
   gewählten Angriffsziel, siehe ROADMAP v0.19).
 
+- **v0.21 – Fraktionswahl, Menü/Einstellungen-Überarbeitung & moderneres UI**
+  Nutzer-Feedback zum Spielstart und zur Kopfleiste, in drei Teilen:
+
+  **Fraktionswahl**: der Spieler spielte bislang immer fest die Menschen
+  (`generateEmpires` in `js/galaxyGen.js` griff hart auf `RACES[0]` zu). Der
+  "Neue Galaxie"-Dialog zeigt jetzt ein Porträt-Raster aller zehn Fraktionen
+  (`js/ui.js` `renderRaceSelector`, Porträts bereits unter
+  `assets/images/races/` vorhanden) – ein Klick wählt sie aus und zeigt
+  darunter groß Porträt, Name und Eigenschaftstext (`blurb` aus
+  `js/data/races.js`). Die gewählte `raceId` läuft über
+  `generateGalaxy`/`generateEmpires` durch: die KI-Rassen werden aus dem
+  Pool ohne die vom Spieler gewählte Fraktion ausgelost (vorher hart gegen
+  die Zeichenkette `"human"` gefiltert – funktioniert jetzt auch, wenn der
+  Spieler selbst eine KI-Fraktion "wegnimmt").
+
+  **Menü & Einstellungen**: Speichern/Laden/Neue Galaxie und der bisher lose
+  in der Kopfleiste sitzende Interaktive-Kämpfe-Schalter sind jetzt in einem
+  Spielmenü gebündelt (neuer `#menu-dialog`, 2×2-Raster), aus dem heraus ein
+  eigener Einstellungen-Dialog (`#settings-dialog`) erreichbar ist. Dort:
+  Interaktive Kämpfe an/aus, Musik an/aus + Lautstärke-Regler, Soundeffekte
+  an/aus + Lautstärke-Regler, sowie – nur informativ – der Seed der aktuell
+  geladenen Galaxie. Diese Einstellungen leben bewusst in einem eigenen
+  localStorage-Eintrag (neues `js/settings.js`, Schlüssel
+  `moo-remake:settings`) statt im Spielstand: es sind Präferenzen des
+  Spielers als Person, die über "Neue Galaxie" und verschiedene Spielstände
+  hinweg erhalten bleiben sollen. Interaktive Kämpfe wird beim Laden/Starten
+  einer Galaxie auf das Spielerimperium angewendet (`applySettingsToPlayer`)
+  – die Einstellung ist jetzt die Quelle der Wahrheit, nicht das, was
+  zuletzt in einem Spielstand gespeichert war.
+
+  **Musik-/Soundeffekt-Infrastruktur**: neues `js/audio.js` – ein
+  AudioManager mit `playMusic`/`stopMusic`/`playSfx` sowie den von den
+  Einstellungen gesteuerten An/Aus- und Lautstärke-Reglern. Es liegen noch
+  keine Audio-Dateien im Projekt (eigenes späteres Release); fehlt eine
+  Datei unter `assets/audio/`, schlägt das Laden einmalig fehl und wird
+  danach lautlos ignoriert (kein Konsolenspam, kein Absturz) – die
+  Einstellungen-UI ist bereits vollständig, sie hat nur noch nichts zum
+  Abspielen. `init()` startet probeweise einen `"theme"`-Loop.
+
+  **Kopfleisten-/UI-Überarbeitung**: die Zeile "Runde X · Seed Y · N
+  Systeme · M Planeten · K Imperien" zeigt jetzt nur noch die Runde (Seed
+  siehe Einstellungen, Zählwerte entfallen ganz). Forschung/Schiffsdesign/
+  Diplomatie/Runde beenden sind feste Icon+Label-Buttons; Heimatsystem und
+  Hall of Fame wurden zu kompakten Icon-only-Buttons (Planet-Symbol,
+  Pokal-Symbol) verkleinert. Neues, handgezeichnetes SVG-Icon-Set
+  (`js/icons.js`, kein Icon-Font/CDN) für alle Kopfleisten-/Menü-/
+  Einstellungen-Buttons. Allgemeine visuelle Auffrischung
+  (`css/style.css`): zusätzliche Farbtoken, abgerundetere Ecken,
+  Hover-/Aktiv-Zustände mit sanften Übergängen, Backdrop-Blur auf
+  Dialog-Overlays, Schatten auf Dialogen/Kopfleiste.
+
+  Verifiziert: alle zehn Fraktionen einzeln als Spielerwahl über je einen
+  60-Runden-Lauf (KI-Pool schließt die gewählte Fraktion korrekt aus, auch
+  wenn der Spieler eine sonst KI-typische Fraktion wählt); Einstellungen-
+  Werte überleben einen Neustart des Prozesses (localStorage); Interaktive-
+  Kämpfe-Schalter wirkt sofort auf das laufende Spielerimperium; Speichern/
+  Laden/Neue Galaxie über das neue Menü funktionsfähig; Kopfleisten-Buttons
+  bei 1400px Fensterbreite vollständig sichtbar ohne Überlappung; keine
+  Konsolenfehler außer den erwarteten, harmlosen 404s für die noch fehlenden
+  Audio-Dateien.
+
+  *Vereinfacht:* keine echten Audio-Assets in diesem Release (nur die
+  Abspiel-Infrastruktur); Musik-Trigger nur beim Spielstart (kein
+  situatives Umschalten zwischen Tracks, z.B. für Kampf vs. Frieden);
+  Rassen-Porträts sind die bereits zuvor erzeugten großen PNGs (keine
+  eigens generierten Thumbnails, Browser skaliert per CSS).
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-
-  und galaktische Zufallsereignis-Kämpfe
+  und galaktische Zufallsereignis-Kämpfe, tatsächliche Musik-/Soundeffekt-
+  Dateien für die in v0.21 gebaute Audio-Infrastruktur
 
 ## Grafik-Pipeline
 

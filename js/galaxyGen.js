@@ -3,7 +3,7 @@ import { STAR_TYPE_WEIGHTS } from "./data/starTypes.js";
 import { ENVIRONMENT_WEIGHTS, getEnvironment } from "./data/environments.js";
 import { RICHNESS_WEIGHTS } from "./data/richness.js";
 import { PLANET_SIZE_WEIGHTS } from "./data/planetSizes.js";
-import { RACES } from "./data/races.js";
+import { RACES, getRace } from "./data/races.js";
 import { initEmpireEconomy, initColony } from "./economy.js";
 import { assignAiBehavior, createStarterDesign } from "./ai.js";
 import { initRelations } from "./diplomacy.js";
@@ -90,7 +90,7 @@ function generateSystem(rng, id, bounds) {
   };
 }
 
-export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, difficultyId = "normal" } = {}) {
+export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, difficultyId = "normal", raceId = "human" } = {}) {
   const sizeCfg = GALAXY_SIZES[sizeId] ?? GALAXY_SIZES.medium;
   const numericSeed = seed === undefined || seed === null || seed === ""
     ? randomSeed()
@@ -130,7 +130,7 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
     return system;
   });
 
-  const empires = generateEmpires(rng, empireCount, numericSeed, difficultyId);
+  const empires = generateEmpires(rng, empireCount, numericSeed, difficultyId, raceId);
   assignHomeworlds(rng, systems, empires);
 
   for (const empire of empires) {
@@ -170,11 +170,12 @@ export function generateGalaxy({ sizeId = "medium", empireCount = 3, seed, diffi
   return galaxy;
 }
 
-// Empire 0 ist immer der Spieler und spielt die Menschen; die KI-Imperien
-// (aktiv erst ab v0.6) erhalten eine zufällige Auswahl der übrigen
-// Fraktionen ohne Wiederholung.
-function generateEmpires(rng, empireCount, seed, difficultyId) {
-  const aiRaces = RACES.filter((r) => r.id !== "human");
+// Empire 0 ist immer der Spieler; er wählt seine Fraktion selbst im
+// "Neue Galaxie"-Dialog (ROADMAP v0.21, playerRaceId). Die KI-Imperien
+// erhalten eine zufällige Auswahl der übrigen Fraktionen ohne Wiederholung.
+function generateEmpires(rng, empireCount, seed, difficultyId, playerRaceId = "human") {
+  const playerRace = getRace(playerRaceId) ?? RACES[0];
+  const aiRaces = RACES.filter((r) => r.id !== playerRace.id);
   for (let i = aiRaces.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [aiRaces[i], aiRaces[j]] = [aiRaces[j], aiRaces[i]];
@@ -182,7 +183,7 @@ function generateEmpires(rng, empireCount, seed, difficultyId) {
 
   const empires = [];
   for (let e = 0; e < empireCount; e++) {
-    const race = e === 0 ? RACES[0] : aiRaces[(e - 1) % aiRaces.length];
+    const race = e === 0 ? playerRace : aiRaces[(e - 1) % aiRaces.length];
     empires.push(
       initEmpireEconomy(
         {

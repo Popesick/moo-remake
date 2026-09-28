@@ -1,11 +1,17 @@
 :root {
   --bg: #05070f;
   --panel-bg: #0d1220;
+  --panel-bg-raised: #10182c;
   --panel-border: #232b45;
   --text: #d6dcf5;
   --text-dim: #838ea6;
   --accent: #5b9dff;
   --accent-2: #ffb454;
+  --accent-soft: rgba(91, 157, 255, 0.14);
+  --danger: #ff5b5b;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
 }
 
@@ -31,10 +37,11 @@ html, body {
 #topbar {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 0.6rem 1rem;
-  background: var(--panel-bg);
+  gap: 1.2rem;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(180deg, #101a33, var(--panel-bg));
   border-bottom: 1px solid var(--panel-border);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
   z-index: 2;
 }
 
@@ -42,36 +49,84 @@ html, body {
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--accent-2);
+  white-space: nowrap;
 }
 
-#topbar-info {
-  flex: 1;
-  color: var(--text-dim);
+#topbar-turn {
+  color: var(--text);
   font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 #topbar-stats {
-  color: var(--text);
-  font-size: 0.85rem;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-#topbar-actions button {
-  margin-left: 0.4rem;
+#topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
-#btn-end-turn {
-  border-color: var(--accent);
+.topbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--panel-border);
+  margin: 0 0.2rem;
 }
 
-.topbar-checkbox {
+.btn-action,
+.btn-icon {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  white-space: nowrap;
+  gap: 0.4rem;
+  background: var(--panel-bg-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.btn-action:hover,
+.btn-icon:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.btn-icon {
+  padding: 0.45rem;
+  width: 34px;
+  height: 34px;
+  justify-content: center;
+}
+
+.btn-action .icon,
+.btn-icon .icon {
+  flex-shrink: 0;
+}
+
+.btn-primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.btn-primary:hover {
+  background: var(--accent);
+  color: #05070f;
 }
 
 .planet-owner {
@@ -161,15 +216,28 @@ button {
   background: #171f36;
   color: var(--text);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.8rem;
   cursor: pointer;
   font-size: 0.85rem;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
 button:hover {
   border-color: var(--accent);
   color: #fff;
+}
+
+.btn-cta {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #05070f;
+  font-weight: 600;
+}
+
+.btn-cta:hover {
+  background: #7cb3ff;
+  color: #05070f;
 }
 
 #main {
@@ -251,6 +319,7 @@ button:hover {
   position: fixed;
   inset: 0;
   background: rgba(2, 4, 10, 0.75);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -264,7 +333,8 @@ button:hover {
 .dialog {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
   padding: 1.4rem 1.6rem;
   width: 320px;
   display: flex;
@@ -535,4 +605,146 @@ button:hover {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.4rem;
+}
+
+/* Spielmenü (ROADMAP v0.21): 2x2-Raster großer Buttons statt einzelner
+   Kopfleisten-Buttons für Neue Galaxie/Speichern/Laden/Einstellungen. */
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.menu-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--panel-bg-raised);
+  padding: 1rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.menu-btn:hover {
+  background: var(--accent-soft);
+}
+
+/* Einstellungen-Dialog. label.settings-row (statt .settings-row) hält die
+   Spezifität mindestens gleichauf mit ".dialog label" oben (das sonst per
+   höherer Spezifität die dort gesetzte flex-direction:column erzwingen
+   würde) und gewinnt bei Gleichstand über die spätere Position im File. */
+label.settings-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.settings-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.settings-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: -0.3rem;
+}
+
+.settings-slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+/* Fraktionswahl im "Neue Galaxie"-Dialog */
+.race-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.4rem;
+}
+
+.race-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--panel-bg-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.2rem;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.race-chip:hover {
+  border-color: var(--race-color, var(--accent));
+  color: var(--text);
+}
+
+.race-chip.active {
+  border-color: var(--race-color, var(--accent));
+  background: var(--accent-soft);
+  color: #fff;
+}
+
+.race-chip img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--panel-border);
+}
+
+.race-chip.active img {
+  border-color: var(--race-color, var(--accent));
+}
+
+.race-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  background: var(--panel-bg-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem;
+}
+
+.race-preview-portrait {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--panel-border);
+  flex-shrink: 0;
+}
+
+.race-preview-name {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.race-preview-blurb {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 0.2rem;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem 1rem;
 }

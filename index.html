@@ -10,22 +10,17 @@
   <div id="app">
     <header id="topbar">
       <div id="brand">MoO Remake</div>
-      <div id="topbar-info"></div>
+      <div id="topbar-turn"></div>
       <div id="topbar-stats"></div>
       <div id="topbar-actions">
-        <label id="interactive-combat-toggle" class="topbar-checkbox" title="Eigene Gefechte selbst auf einem Hexfeld-Kampf-Grid führen, statt sie automatisch auszuwürfeln.">
-          <input type="checkbox" id="chk-interactive-combat" />
-          Interaktive Kämpfe
-        </label>
-        <button id="btn-research">Forschung</button>
-        <button id="btn-shipdesign">Schiffsdesign</button>
-        <button id="btn-diplomacy">Diplomatie &amp; Spionage</button>
-        <button id="btn-home">Heimatsystem</button>
-        <button id="btn-halloffame">Hall of Fame</button>
-        <button id="btn-end-turn">Runde beenden</button>
-        <button id="btn-new-game">Neue Galaxie</button>
-        <button id="btn-save">Speichern</button>
-        <button id="btn-load">Laden</button>
+        <button id="btn-research" class="btn-action" title="Forschung"></button>
+        <button id="btn-shipdesign" class="btn-action" title="Schiffsdesign"></button>
+        <button id="btn-diplomacy" class="btn-action" title="Diplomatie &amp; Spionage"></button>
+        <button id="btn-end-turn" class="btn-action btn-primary" title="Runde beenden"></button>
+        <span class="topbar-divider" aria-hidden="true"></span>
+        <button id="btn-home" class="btn-icon" title="Heimatsystem"></button>
+        <button id="btn-halloffame" class="btn-icon" title="Hall of Fame"></button>
+        <button id="btn-menu" class="btn-icon" title="Menü"></button>
       </div>
     </header>
 
@@ -44,43 +39,95 @@
     </main>
 
     <div id="new-game-dialog" class="dialog-overlay" hidden>
-      <div class="dialog">
+      <div class="dialog dialog-wide">
         <h2>Neue Galaxie</h2>
-        <label>
-          Größe
-          <select id="ng-size">
-            <option value="small">Klein (Small)</option>
-            <option value="medium" selected>Mittel (Medium)</option>
-            <option value="large">Groß (Large)</option>
-            <option value="huge">Riesig (Huge)</option>
-          </select>
-        </label>
-        <label>
-          Anzahl KI-Imperien
-          <select id="ng-empires">
-            <option value="2">2</option>
-            <option value="3" selected>3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-          </select>
-        </label>
-        <label>
-          Schwierigkeitsgrad
-          <select id="ng-difficulty">
-            <option value="simple">Einfach</option>
-            <option value="normal" selected>Normal</option>
-            <option value="hard">Schwer</option>
-            <option value="impossible">Unmöglich</option>
-          </select>
-        </label>
-        <label>
-          Seed (optional, für reproduzierbare Galaxien)
-          <input id="ng-seed" type="text" placeholder="leer = zufällig" />
-        </label>
+        <div class="dialog-hint">Fraktion wählen</div>
+        <div id="race-grid"></div>
+        <div id="race-preview"></div>
+        <input type="hidden" id="ng-race" value="human" />
+        <div class="field-grid">
+          <label>
+            Größe
+            <select id="ng-size">
+              <option value="small">Klein (Small)</option>
+              <option value="medium" selected>Mittel (Medium)</option>
+              <option value="large">Groß (Large)</option>
+              <option value="huge">Riesig (Huge)</option>
+            </select>
+          </label>
+          <label>
+            Anzahl KI-Imperien
+            <select id="ng-empires">
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </label>
+          <label>
+            Schwierigkeitsgrad
+            <select id="ng-difficulty">
+              <option value="simple">Einfach</option>
+              <option value="normal" selected>Normal</option>
+              <option value="hard">Schwer</option>
+              <option value="impossible">Unmöglich</option>
+            </select>
+          </label>
+          <label>
+            Seed (optional)
+            <input id="ng-seed" type="text" placeholder="leer = zufällig" />
+          </label>
+        </div>
         <div class="dialog-actions">
           <button id="ng-cancel">Abbrechen</button>
-          <button id="ng-confirm">Galaxie generieren</button>
+          <button id="ng-confirm" class="btn-cta">Galaxie generieren</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="menu-dialog" class="dialog-overlay" hidden>
+      <div class="dialog">
+        <h2>Menü</h2>
+        <div class="menu-grid">
+          <button id="menu-new-game" class="menu-btn"></button>
+          <button id="menu-save" class="menu-btn"></button>
+          <button id="menu-load" class="menu-btn"></button>
+          <button id="menu-settings" class="menu-btn"></button>
+        </div>
+        <div class="dialog-actions">
+          <button id="menu-close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-dialog" class="dialog-overlay" hidden>
+      <div class="dialog">
+        <h2>Einstellungen</h2>
+        <label class="settings-row">
+          <span>Interaktive Kämpfe</span>
+          <input type="checkbox" id="chk-interactive-combat" />
+        </label>
+        <p class="dialog-hint">Eigene Gefechte selbst auf einem Hexfeld-Kampf-Grid führen, statt sie automatisch auszuwürfeln.</p>
+        <label class="settings-row">
+          <span id="settings-music-label">Musik</span>
+          <input type="checkbox" id="chk-music-enabled" />
+        </label>
+        <label class="settings-slider-row">
+          <span>Musiklautstärke</span>
+          <input type="range" id="rng-music-volume" min="0" max="100" />
+        </label>
+        <label class="settings-row">
+          <span id="settings-sfx-label">Soundeffekte</span>
+          <input type="checkbox" id="chk-sfx-enabled" />
+        </label>
+        <label class="settings-slider-row">
+          <span>Soundeffekt-Lautstärke</span>
+          <input type="range" id="rng-sfx-volume" min="0" max="100" />
+        </label>
+        <div id="settings-seed-info" class="dialog-hint"></div>
+        <div class="dialog-actions">
+          <button id="settings-close">Schließen</button>
         </div>
       </div>
     </div>
