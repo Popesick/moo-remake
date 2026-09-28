@@ -2,8 +2,9 @@ import { getPersonality, getObjective, PERSONALITIES, OBJECTIVES } from "./data/
 import { normalizeSliders, COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 import { normalizeAllocation } from "./research.js";
 import { isColonizable, colonizePlanet, maxPopulation } from "./economy.js";
-import { addShipDesign } from "./shipDesign.js";
-import { modulesOfKind } from "./shipDesign.js";
+import { addShipDesign, canAddDesign, computeDesignStats, modulesOfKind } from "./shipDesign.js";
+import { DISCIPLINES } from "./data/disciplines.js";
+import { MAX_SHIP_DESIGNS } from "./data/hulls.js";
 import { findFleetsAt, sendFleet, recallFleet } from "./fleets.js";
 import { isAtWar, setRelationStatus } from "./diplomacy.js";
 import { resolveInvasion, applyInvasionResult, maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
@@ -63,14 +64,17 @@ export function assignAiBehavior(rng, empire) {
 
 // Erstellt zu Partiebeginn ein einfaches Start-Design aus den Level-1-
 // Komponenten, die jedem Imperium garantiert zur Verfügung stehen (siehe
-// js/research.js, "obligatorische Schlüsseltechnologien").
+// js/research.js, "obligatorische Schlüsseltechnologien"). Wird als
+// empire.currentWarshipDesignId gemerkt, damit applyEconomyPolicy und
+// maybeRedesignShips (ROADMAP v0.17) unten wissen, welches Design gerade
+// das aktuelle "beste" Kriegsschiff ist.
 export function createStarterDesign(empire) {
   const armor = modulesOfKind("armor", empire)[0];
   const shield = modulesOfKind("shield", empire)[0];
   const drive = modulesOfKind("drive", empire)[0];
   const weapon = modulesOfKind("weapon", empire)[0];
   if (!weapon) return;
-  addShipDesign(empire, {
+  const result = addShipDesign(empire, {
     name: `${empire.name}-Wache`,
     hullId: "small",
     armorId: armor?.id ?? null,
@@ -78,6 +82,100 @@ export function createStarterDesign(empire) {
     driveId: drive?.id ?? null,
     weapons: [{ techId: weapon.id, count: 3 }],
   });
+  if (result.ok) empire.currentWarshipDesignId = result.design.id;
+}
+
+// KI-Schiffsklassen-Redesign im Spielverlauf (ROADMAP v0.17): ohne dies
+// bliebe jede KI für die gesamte Partie bei ihrem einmaligen Start-Design
+// (Small-Rumpf, Level-1-Komponenten) stehen, selbst nach hundert
+// erforschten Runden. Alle paar Runden prüft die KI, ob inzwischen eine
+// größere Rumpfklasse oder bessere Komponenten verfügbar sind, und legt bei
+// Bedarf ein neues Design an – das alte bleibt unverändert bestehen
+// (nicht verschrotten: bereits gebaute Schiffe dieses Designs würden sonst
+// beim nächsten Gefecht unsichtbar, siehe js/combat.js buildUnits, das
+// Stacks ohne passendes Design überspringt). Neue Produktion zielt danach
+// über empire.currentWarshipDesignId auf das neue, bessere Design.
+const REDESIGN_CHECK_INTERVAL_TURNS = 20;
+// Rumpfgrößen sind nicht techgebunden (js/data/hulls.js), anders als bei
+// Komponenten gibt es dafür keine Analyse-Quelle. Plausibler, hier zentral
+// tunbarer Platzhalter: Freischaltung der nächstgrößeren Klasse anhand der
+// Summe aller sechs Forschungsdisziplin-Stufen (dieselbe Kennzahl wie die
+// Techstufen-Anzeige der Kopfleiste, siehe js/ui.js updateTopbarInfo).
+const HULL_TECH_SUM_THRESHOLDS = { medium: 40, large: 100, huge: 180 };
+const AI_HULL_DESIGN_LABEL = { small: "Wache", medium: "Kreuzer", large: "Schlachtschiff", huge: "Dreadnought" };
+const MAX_AI_WEAPON_COUNT = 8; // begrenzt Design-Bewaffnungsdichte unabhängig von der theoretisch möglichen Rumpfkapazität
+
+function pickBestTech(kind, empire) {
+  const options = modulesOfKind(kind, empire);
+  if (options.length === 0) return null;
+  return options.reduce((best, t) => (t.level > best.level ? t : best));
+}
+
+function chooseHullIdForDesign(empire) {
+  const techSum = DISCIPLINES.reduce((sum, d) => sum + (empire.research?.techLevel[d.id] ?? 0), 0);
+  if (techSum >= HULL_TECH_SUM_THRESHOLDS.huge) return "huge";
+  if (techSum >= HULL_TECH_SUM_THRESHOLDS.large) return "large";
+  if (techSum >= HULL_TECH_SUM_THRESHOLDS.medium) return "medium";
+  return "small";
+}
+
+// Füllt so viele Kopien der besten verfügbaren Waffe wie möglich in die
+// verbleibende Rumpfkapazität, bis entweder die Kapazität oder
+// MAX_AI_WEAPON_COUNT erreicht ist. Der Name trägt ab der zweiten
+// Design-Generation ein "Mk."-Suffix (dieselbe Konvention wie die
+// Battle-Computer-Techstufen im Techbaum), damit gleichnamige
+// Redesigns derselben Rumpfklasse im Kampfbericht unterscheidbar bleiben.
+function buildBestWarshipDesign(empire, hullId, armor, shield, drive, weapon) {
+  const generation = (empire.warshipDesignGeneration ?? 0) + 1;
+  const label = AI_HULL_DESIGN_LABEL[hullId] ?? hullId;
+  const base = {
+    name: generation > 1 ? `${empire.name}-${label} Mk.${generation}` : `${empire.name}-${label}`,
+    hullId,
+    armorId: armor?.id ?? null,
+    shieldId: shield?.id ?? null,
+    driveId: drive?.id ?? null,
+  };
+  let count = 1;
+  if (computeDesignStats({ ...base, weapons: [{ techId: weapon.id, count }] }, empire)?.overCapacity) return null;
+  while (count < MAX_AI_WEAPON_COUNT) {
+    const trial = computeDesignStats({ ...base, weapons: [{ techId: weapon.id, count: count + 1 }] }, empire);
+    if (!trial || trial.overCapacity) break;
+    count += 1;
+  }
+  return { ...base, weapons: [{ techId: weapon.id, count }] };
+}
+
+function maybeRedesignShips(empire, turn) {
+  if (turn % REDESIGN_CHECK_INTERVAL_TURNS !== 0) return;
+  if (!canAddDesign(empire)) return;
+
+  const armor = pickBestTech("armor", empire);
+  const shield = pickBestTech("shield", empire);
+  const drive = pickBestTech("drive", empire);
+  const weapon = pickBestTech("weapon", empire);
+  if (!weapon) return;
+
+  const hullId = chooseHullIdForDesign(empire);
+  const current = empire.shipDesigns.find((d) => d.id === empire.currentWarshipDesignId);
+  const hullUpgraded = !current || current.hullId !== hullId;
+  // Nur die Rumpfklasse und die Waffe lösen ein Redesign aus (nicht schon
+  // jede einzelne Panzerungs-/Schild-/Antriebsstufe für sich) – bei nur 6
+  // Design-Slots (MAX_SHIP_DESIGNS) würden sonst allein die zahlreichen
+  // Panzerungs-/Schildstufen das Kontingent verbrauchen, bevor je eine
+  // größere Rumpfklasse erreicht wird. Ist nur noch ein Slot frei, wird der
+  // für eine künftige Rumpfklassen-Aufwertung reserviert statt für eine
+  // reine Waffen-Auffrischung auf derselben Rumpfgröße.
+  const weaponUpgraded = current?.weapons?.[0]?.techId !== weapon.id;
+  const isBetter = hullUpgraded || (weaponUpgraded && empire.shipDesigns.length < MAX_SHIP_DESIGNS - 1);
+  if (!isBetter) return;
+
+  const design = buildBestWarshipDesign(empire, hullId, armor, shield, drive, weapon);
+  if (!design) return;
+  const result = addShipDesign(empire, design);
+  if (result.ok) {
+    empire.currentWarshipDesignId = result.design.id;
+    empire.warshipDesignGeneration = (empire.warshipDesignGeneration ?? 0) + 1;
+  }
 }
 
 function planetSpecialTier(planet) {
@@ -136,8 +234,16 @@ function applyEconomyPolicy(galaxy, empire) {
   // weil nie wieder ein Kolonieschiff gebaut wurde). Der bevölkerungs-
   // reichste eigene Planet bleibt deshalb immer für Kolonieschiffbau
   // reserviert, alle übrigen bauen bei militanter Ausrichtung Kriegsschiffe.
+  // Aktuell bestes Kriegsschiff-Design (ROADMAP v0.17, siehe
+  // maybeRedesignShips): empire.currentWarshipDesignId zeigt auf das
+  // zuletzt entworfene, beste verfügbare Design statt starr auf
+  // shipDesigns[0] – nach einem Redesign bliebe sonst die Produktion am
+  // veralteten Start-Design hängen, obwohl bereits ein besseres existiert.
+  const warshipDesign =
+    empire.shipDesigns.find((d) => d.id === empire.currentWarshipDesignId) ?? empire.shipDesigns[0];
+
   let expansionPlanet = null;
-  if (militant && empire.shipDesigns.length > 0) {
+  if (militant && warshipDesign) {
     const ownedPlanets = galaxy.systems.flatMap((s) => s.planets).filter((p) => p.colonizedBy === empire.id);
     expansionPlanet = ownedPlanets.reduce(
       (best, p) => (!best || p.population > best.population ? p : best),
@@ -149,9 +255,9 @@ function applyEconomyPolicy(galaxy, empire) {
     for (const planet of system.planets) {
       if (planet.colonizedBy !== empire.id) continue;
       planet.sliders = { ...sliderWeights };
-      if (empire.shipDesigns.length > 0) {
+      if (warshipDesign) {
         const buildsWarship = militant && planet !== expansionPlanet;
-        planet.productionTarget = buildsWarship ? empire.shipDesigns[0].id : null;
+        planet.productionTarget = buildsWarship ? warshipDesign.id : null;
       }
     }
   }
@@ -386,6 +492,10 @@ function attemptEspionage(galaxy, empire, seed, turn) {
 }
 
 export function runAiTurn(galaxy, empire, seed, turn) {
+  // Vor der Wirtschaftspolitik, damit ein frisch entworfenes, besseres
+  // Kriegsschiff-Design (ROADMAP v0.17) noch in derselben Runde als
+  // Produktionsziel greift.
+  maybeRedesignShips(empire, turn);
   applyEconomyPolicy(galaxy, empire);
   attemptColonization(galaxy, empire);
   considerDiplomacy(galaxy, empire, seed, turn);

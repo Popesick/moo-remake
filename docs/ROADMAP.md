@@ -463,12 +463,59 @@ spielbar von der Kolonisierung bis zum Sieg.
   Geschwindigkeit und Angriffs-/ECM-Boni wirken bereits über die gemeinsame
   Kampfmathematik.
 
+- **v0.17 – KI-Schiffsklassen-Redesign im Spielverlauf**
+  Bisher entwarf jede KI zu Partiebeginn genau ein Start-Design
+  (`createStarterDesign`: Small-Rumpf, Level-1-Komponenten) und blieb dabei
+  für den Rest der Partie – noch nach hundert erforschten Runden baute sie
+  weiter dieselben schwachen Erstlings-Kriegsschiffe. `js/ai.js`
+  `maybeRedesignShips` prüft jetzt alle 20 Runden (`runAiTurn`, vor
+  `applyEconomyPolicy`, damit ein frisches Design noch in derselben Runde
+  als Produktionsziel greift), ob eine größere Rumpfklasse oder eine
+  bessere Waffe verfügbar ist, und legt bei Bedarf ein neues Design an.
+
+  Rumpfklassen sind im Techbaum nicht freigeschaltet (alle vier stehen von
+  Anfang an offen, siehe `js/data/hulls.js`) – die KI schaltet sie sich
+  stattdessen selbst anhand der Summe aller sechs Forschungsdisziplin-Stufen
+  frei (dieselbe Kennzahl wie die Techstufen-Anzeige der Kopfleiste):
+  Medium ab 40, Large ab 100, Huge ab 180. Armor/Schild/Antrieb/Waffe werden
+  jeweils als das höchststufige erforschte Modul dieser Art gewählt
+  (`pickBestTech`), die Waffenanzahl füllt die verbleibende Rumpfkapazität
+  bis zu einem Deckel von 8. Alte Designs werden NICHT verschrottet, wenn
+  ein besseres entsteht – bereits gebaute Schiffe eines verschrotteten
+  Designs wären sonst im nächsten Gefecht unsichtbar (`js/combat.js`
+  `buildUnits` überspringt Stacks ohne passendes Design). Neue Produktion
+  zielt stattdessen über `empire.currentWarshipDesignId` auf das jeweils
+  neueste Design; `applyEconomyPolicy`s bisherige feste Referenz auf
+  `shipDesigns[0]` wäre nach einem Redesign nicht mehr korrekt gewesen und
+  wurde entsprechend korrigiert.
+
+  Da `MAX_SHIP_DESIGNS` bei 6 liegt, würde allein die Zahl der Panzerungs-
+  und Schildstufen (7 bzw. 11 Stufen) das Kontingent aufbrauchen, bevor je
+  eine größere Rumpfklasse erreicht wird – ein Redesign löst deshalb nur
+  bei einer Rumpfklassen-Aufwertung oder einer neuen Bestwaffe aus (nicht
+  bei reiner Panzerungs-/Schild-/Antriebs-Verbesserung), und der letzte
+  freie Slot ist ausschließlich für eine künftige Rumpfklassen-Aufwertung
+  reserviert. Ab der zweiten Design-Generation trägt der Name ein
+  "Mk."-Suffix (dieselbe Konvention wie die Battle-Computer-Techstufen im
+  Techbaum), damit mehrere Redesigns derselben Rumpfklasse im Kampfbericht
+  unterscheidbar bleiben. Verifiziert über einen 400-Runden-Testlauf: KI-
+  Imperien wechseln zuverlässig von Small- auf Medium- und (bei
+  ausreichendem Forschungsvorsprung) auf Large-Rümpfe, ohne das
+  Design-Kontingent vorzeitig zu erschöpfen.
+
+  *Vereinfacht:* Rumpfklassen-Freischaltung ist ein reiner KI-interner
+  Platzhalter-Schwellenwert (keine Analyse-Quelle beziffert dies); die KI
+  bewertet Designs rein nach höchster Technikstufe, nicht nach tatsächlicher
+  Kampfkraft/Kosten-Nutzen-Abwägung; alte, ungenutzte Designs bleiben bis
+  Partieende in `shipDesigns` stehen statt bei völligem Verschwinden aller
+  ihrer Schiffe automatisch aufgeräumt zu werden.
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidaten: KI-Redesign neuer Schiffsklassen im Spielverlauf,
-  Beam-Distanzabfall über die im interaktiven Kampf-Grid (v0.16) bereits
-  eingeführte Reichweite hinaus, die im Techbaum als "(ab v0.5)" markierten
-  Spezialfähigkeiten (Flächenschaden, Tarnung, Stasisfeld usw.)
+- Polish-Kandidaten: Beam-Distanzabfall über die im interaktiven Kampf-Grid
+  (v0.16) bereits eingeführte Reichweite hinaus, die im Techbaum als
+  "(ab v0.5)" markierten Spezialfähigkeiten (Flächenschaden, Tarnung,
+  Stasisfeld usw.)
 
 ## Grafik-Pipeline
 
