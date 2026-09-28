@@ -3,7 +3,7 @@ import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { initAudio, setMusicEnabled, setSfxEnabled, setMusicVolume, setSfxVolume, playMusic } from "./audio.js";
 import { render, pickSystemAt, fitGalaxyToView, centerCameraOnPoint } from "./render.js";
-import { simulateTurn, colonizePlanet, computePlanetProduction, applyBattleResult, resolvePendingBattleAuto } from "./economy.js";
+import { simulateTurn, orderColonization, computePlanetProduction, applyBattleResult, resolvePendingBattleAuto } from "./economy.js";
 import { createBattle, moveUnitTo, attackWithUnit, endPlayerPhase, retreat, finalizeBattleResult } from "./hexcombat.js";
 import { renderHexCombat, resetHexCombatSelection } from "./renderHexCombat.js";
 import { normalizeSliders } from "./data/economy.js";
@@ -102,7 +102,7 @@ const panelCallbacks = {
   },
   onColonize(systemId, planetId) {
     const playerEmpire = gameState.galaxy.empires.find((e) => e.isPlayer);
-    const result = colonizePlanet(gameState.galaxy, systemId, planetId, playerEmpire.id);
+    const result = orderColonization(gameState.galaxy, systemId, planetId, playerEmpire.id);
     if (!result.ok) {
       flashTopbar(result.reason);
       return;

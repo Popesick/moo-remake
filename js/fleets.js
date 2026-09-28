@@ -196,13 +196,95 @@ export function consumeColonyShip(galaxy, fleet) {
 }
 
 // Gesamtzahl der Kolonieschiffe eines Imperiums über alle Flotten hinweg
-// (stationär und unterwegs) – nur für Anzeigezwecke (Topbar), siehe js/ui.js.
+// (stationär und unterwegs), OHNE bereits einem Kolonisierungsauftrag
+// zugeteilte (siehe ROADMAP v0.22 orderColonization/colonizeTarget unten) –
+// nur für Anzeigezwecke (Topbar), siehe js/ui.js. Nutzer-Beispiel: 3
+// Kolonieschiffe, 2 davon unterwegs zur Kolonisierung, 1 untätig -> Anzeige
+// "1 Kolonieschiff".
 export function countColonyShips(galaxy, empireId) {
   return galaxy.fleets
-    .filter((f) => f.ownerEmpireId === empireId)
+    .filter((f) => f.ownerEmpireId === empireId && !f.colonizeTarget)
     .flatMap((f) => f.stacks)
     .filter((s) => s.designId === COLONY_SHIP_DESIGN_ID)
     .reduce((sum, s) => sum + s.count, 0);
+}
+
+// Kolonisieren-auf-Zuruf (ROADMAP v0.22, Nutzer-Feedback): ein Klick auf
+// "Kolonisieren" in einem erforschten System OHNE eigenes Kolonieschiff vor
+// Ort schickt automatisch das nächstgelegene, noch nicht zugeteilte eigene
+// Kolonieschiff los (js/economy.js orderColonization) und markiert es per
+// fleet.colonizeTarget = { systemId, planetId } als "im Transfer" – bei
+// Ankunft kolonisiert simulateTurn automatisch. Die folgenden drei Helfer
+// verwalten diese Zuteilung.
+
+// Liefert die Flotte, deren Kolonieschiff für genau diesen Planeten
+// unterwegs ist, oder null.
+export function findColonizeAssignment(galaxy, systemId, planetId) {
+  return (
+    galaxy.fleets.find(
+      (f) => f.colonizeTarget?.systemId === systemId && f.colonizeTarget?.planetId === planetId
+    ) ?? null
+  );
+}
+
+// Gibt es irgendwo ein eigenes, noch nicht zugeteiltes Kolonieschiff
+// (stationär oder unterwegs, z.B. per Auto-Erkundung)? Für die
+// "Kolonisieren"-Verfügbarkeitsprüfung in js/ui.js.
+export function hasAvailableColonyShip(galaxy, empireId) {
+  return galaxy.fleets.some(
+    (f) =>
+      f.ownerEmpireId === empireId &&
+      !f.colonizeTarget &&
+      f.stacks.some((s) => s.designId === COLONY_SHIP_DESIGN_ID && s.count > 0)
+  );
+}
+
+// Nächstgelegenes eigenes, stationäres und unzugeteiltes Kolonieschiff für
+// einen neuen Kolonisierungsauftrag – über die Sternenstraßen-Pfaddistanz ab
+// der jeweiligen Flottenposition, nicht Luftlinie.
+export function findNearestIdleColonyShipFleet(galaxy, empireId, targetSystemId) {
+  const candidates = galaxy.fleets.filter(
+    (f) =>
+      f.ownerEmpireId === empireId &&
+      !f.destinationSystemId &&
+      !f.colonizeTarget &&
+      f.stacks.some((s) => s.designId === COLONY_SHIP_DESIGN_ID && s.count > 0)
+  );
+  let best = null;
+  let bestDist = Infinity;
+  for (const fleet of candidates) {
+    const d = laneDistance(galaxy, fleet.systemId, targetSystemId);
+    if (d === null) continue;
+    if (d < bestDist) {
+      bestDist = d;
+      best = fleet;
+    }
+  }
+  return best;
+}
+
+// Spaltet genau EIN Kolonieschiff aus `fleet` in eine neue, eigenständige
+// Flotte ab – unabhängig davon, ob der Kolonieschiff-Stack noch weitere
+// Schiffe oder die Flotte weitere, andere Stacks (z.B. eine zufällig
+// mitgereiste Kriegsschiff-Eskorte) enthält. Ein etwaiger Rest bleibt in
+// der Ursprungsflotte zurück; wird sie dadurch leer, wird sie entfernt.
+export function extractSingleColonyShip(galaxy, fleet) {
+  const stack = fleet.stacks.find((s) => s.designId === COLONY_SHIP_DESIGN_ID && s.count > 0);
+  if (!stack) return null;
+  stack.count -= 1;
+  fleet.stacks = fleet.stacks.filter((s) => s.count > 0);
+  if (fleet.stacks.length === 0) {
+    galaxy.fleets = galaxy.fleets.filter((f) => f.id !== fleet.id);
+  }
+  const newFleet = {
+    id: nextFleetId(galaxy),
+    ownerEmpireId: fleet.ownerEmpireId,
+    systemId: fleet.systemId,
+    destinationSystemId: null,
+    stacks: [{ designId: COLONY_SHIP_DESIGN_ID, count: 1 }],
+  };
+  galaxy.fleets.push(newFleet);
+  return newFleet;
 }
 
 // Gesamt-ETA (Runden) einer ggf. mehrstufigen Reise: aktuelle Etappe plus

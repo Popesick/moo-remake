@@ -4,7 +4,17 @@ import { getPlanetSize } from "./data/planetSizes.js";
 import { getDifficulty } from "./data/difficulty.js";
 import { initEmpireResearch, processResearchTurn, applyTechEffect } from "./research.js";
 import { computeDesignStats } from "./shipDesign.js";
-import { addShipsToSystem, advanceFleets, findColonyShipFleetAt, consumeColonyShip } from "./fleets.js";
+import {
+  addShipsToSystem,
+  advanceFleets,
+  findColonyShipFleetAt,
+  consumeColonyShip,
+  sendFleet,
+  isSystemInRange,
+  findColonizeAssignment,
+  findNearestIdleColonyShipFleet,
+  extractSingleColonyShip,
+} from "./fleets.js";
 import { resolveSystemCombat } from "./combat.js";
 import { DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import { getRaceTraits } from "./data/raceTraits.js";
@@ -250,6 +260,15 @@ export function simulateTurn(galaxy) {
   // als erforscht markieren, bevor Kampfberichte/Events etc. darauf Bezug
   // nehmen.
   updateExploredSystems(galaxy);
+  // Kolonisieren-auf-Zuruf (ROADMAP v0.22): ein per orderColonization
+  // losgeschicktes Kolonieschiff kolonisiert bei Ankunft automatisch seinen
+  // zugewiesenen Planeten, ohne dass der Spieler erneut klicken muss.
+  for (const fleet of arrivals) {
+    const target = fleet.colonizeTarget;
+    if (!target || fleet.systemId !== target.systemId) continue;
+    fleet.colonizeTarget = null;
+    colonizePlanet(galaxy, target.systemId, target.planetId, fleet.ownerEmpireId);
+  }
   const { reports: battleReports, pendingBattles } = resolveAllCombats(galaxy);
   // Interaktives Kampf-Grid (ROADMAP v0.16): Gefechte, an denen der Spieler
   // beteiligt ist, werden bei aktivierter Einstellung hier NICHT aufgelöst,
@@ -423,6 +442,50 @@ export function colonizePlanet(galaxy, systemId, planetId, empireId) {
   consumeColonyShip(galaxy, colonyFleet);
   planet.colonizedBy = empireId;
   initColony(planet, { isHomeworld: false });
+  return { ok: true };
+}
+
+// Kolonisieren-auf-Zuruf (ROADMAP v0.22, Nutzer-Feedback): steht am
+// Zielsystem noch kein eigenes Kolonieschiff, wird hier automatisch das
+// nächstgelegene, noch unzugeteilte losgeschickt (fleet.colonizeTarget) –
+// bei Ankunft kolonisiert simulateTurn automatisch (siehe oben), der
+// Spieler muss nicht noch einmal klicken. Steht bereits eines vor Ort,
+// verhält sich dies identisch zum bisherigen sofortigen colonizePlanet.
+export function orderColonization(galaxy, systemId, planetId, empireId) {
+  const empire = galaxy.empires.find((e) => e.id === empireId);
+  if (!empire) return { ok: false, reason: "Imperium nicht gefunden." };
+  const system = galaxy.systems.find((s) => s.id === systemId);
+  const planet = system?.planets.find((p) => p.id === planetId);
+  if (!planet) return { ok: false, reason: "Planet nicht gefunden." };
+  if (!isColonizable(planet, empire)) {
+    return { ok: false, reason: "Planet ist mit aktueller Technologie nicht kolonisierbar." };
+  }
+  if (isOrionGuarded(galaxy, systemId)) {
+    return { ok: false, reason: "Der Guardian of Orion bewacht dieses System noch." };
+  }
+  if (findColonizeAssignment(galaxy, systemId, planetId)) {
+    return { ok: false, reason: "Bereits ein Kolonieschiff auf dem Weg zu diesem Planeten." };
+  }
+  if (findColonyShipFleetAt(galaxy, empireId, systemId)) {
+    return colonizePlanet(galaxy, systemId, planetId, empireId);
+  }
+  if (!isSystemInRange(galaxy, empire, system)) {
+    return {
+      ok: false,
+      reason: `Außerhalb der Treibstoffreichweite (${empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC} Parsec ab eigenen Kolonien).`,
+    };
+  }
+
+  const sourceFleet = findNearestIdleColonyShipFleet(galaxy, empireId, systemId);
+  if (!sourceFleet) {
+    return { ok: false, reason: "Kein verfügbares Kolonieschiff." };
+  }
+
+  const dispatchFleet = extractSingleColonyShip(galaxy, sourceFleet);
+  const result = sendFleet(galaxy, dispatchFleet.id, systemId);
+  if (!result.ok) return result;
+
+  dispatchFleet.colonizeTarget = { systemId, planetId };
   return { ok: true };
 }
 

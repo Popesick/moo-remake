@@ -701,6 +701,63 @@ spielbar von der Kolonisierung bis zum Sieg.
   Rassen-Porträts sind die bereits zuvor erzeugten großen PNGs (keine
   eigens generierten Thumbnails, Browser skaliert per CSS).
 
+- **v0.22 – Auto-Erkundung-Bugfix, Kolonisieren-auf-Zuruf & Menü-Reihenfolge**
+  Drei Nutzer-Feedback-Punkte:
+
+  **Menü-Reihenfolge**: das Spielmenü (ROADMAP v0.21) zeigt jetzt oben
+  Speichern/Laden, unten Einstellungen/Neue Galaxie (reine
+  `index.html`-Reihenfolge im 2×2-Raster).
+
+  **Auto-Erkundung-Bugfix**: "Automatisch erforschen" blieb nach dem ersten
+  Sprung meist einfach stehen. Ursache: `js/exploration.js` `runAutoExplore`
+  wählte Kandidatenziele nach Distanz AB DER AKTUELLEN FLOTTENPOSITION,
+  während `sendFleet` (`js/fleets.js`) die Treibstoffreichweite davon
+  unabhängig AB DER NÄCHSTEN EIGENEN KOLONIE prüft (`isSystemInRange`).
+  Sobald die Flotte ein bis zwei Erkundungssprünge von jeder Kolonie weg
+  war, wirkte ein Nachbarsystem aus Flottensicht "nah genug", scheiterte
+  dann aber stillschweigend an `sendFleet`s Treibstoffprüfung – die Flotte
+  bekam nie ein neues Ziel und blieb stehen. Die Kandidatenauswahl
+  filtert jetzt zusätzlich mit genau derselben `isSystemInRange`-Prüfung,
+  die `sendFleet` ohnehin anwendet. Verifiziert per direktem Vergleich:
+  die alte Logik blieb nach einem einzigen Sprung hängen, die neue
+  erkundete im selben Testlauf drei Systeme, bis die Treibstoffreichweite
+  tatsächlich erschöpft war.
+
+  **Kolonisieren-auf-Zuruf** (`js/economy.js` `orderColonization`, neue
+  Helfer in `js/fleets.js`): "Kolonisieren" ist jetzt auch ohne ein vor Ort
+  stehendes Kolonieschiff anklickbar, solange der Planet erforscht,
+  kolonisierbar, nicht bewacht ist und irgendwo im Imperium ein noch nicht
+  zugeteiltes Kolonieschiff existiert, das das Ziel in Treibstoffreichweite
+  erreichen kann. Ein Klick spaltet – falls nötig – genau ein Kolonieschiff
+  aus der nächstgelegenen unzugeteilten Flotte ab (`extractSingleColonyShip`,
+  lässt Kriegsschiff-Eskorten oder weitere Kolonieschiffe im Ursprungs-Stack
+  unberührt zurück), schickt es los und markiert es per
+  `fleet.colonizeTarget = { systemId, planetId }` als zugeteilt. Bei Ankunft
+  kolonisiert `simulateTurn` automatisch (neuer Hook direkt nach
+  `advanceFleets`), ohne dass der Spieler erneut klicken muss. Solange ein
+  Kolonieschiff für einen bestimmten Planeten unterwegs ist, zeigt die
+  Planetenkarte statt des Buttons "Kolonieschiff im Transfer"
+  (`findColonizeAssignment`). Die Kolonieschiffe-Kennzahl in der Kopfleiste
+  (`countColonyShips`) zählt zugeteilte, im Transfer befindliche
+  Kolonieschiffe nicht mehr mit – Beispiel aus dem Nutzer-Feedback (3
+  Kolonieschiffe, 2 im Transfer, 1 untätig) zeigt jetzt korrekt "1
+  Kolonieschiff".
+
+  Verifiziert: Order-Dispatch reduziert die angezeigte Kolonieschiffzahl
+  sofort korrekt und erstellt die Zuteilung; automatische Kolonisierung bei
+  Ankunft nach der erwarteten Reisezeit; "Kein Kolonieschiff verfügbar."-
+  bzw. Reichweiten-Hinweis, wenn kein Schiff bzw. keines in Reichweite
+  existiert; vollständiger Durchlauf über echte Klicks in der Live-UI
+  (System auswählen, Kolonisieren klicken, mehrere Runden über den echten
+  "Runde beenden"-Button, automatische Kolonisierung bestätigt); 200-Runden-
+  Regression mit gemischter Auto-Erkundung und mehreren
+  Kolonisieren-auf-Zuruf-Aufträgen ohne Fehler.
+
+  *Vereinfacht:* die Auswahl des zu entsendenden Kolonieschiffs
+  berücksichtigt nur die Sternenstraßen-Pfaddistanz ab der jeweiligen
+  Flottenposition, nicht die tatsächliche verbleibende Reisezeit oder
+  laufende Aufträge anderer Flotten.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-

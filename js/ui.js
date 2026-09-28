@@ -11,7 +11,14 @@ import { costForTech, getCandidateTechs } from "./research.js";
 import { getResearchCostFactor } from "./data/raceResearch.js";
 import { isAtWar, getTradeAgreement, computeTradeBonusBC } from "./diplomacy.js";
 import { maxInvasionTroops, fleetTroopCapacity } from "./invasion.js";
-import { isSystemInRange, findColonyShipFleetAt, countColonyShips, estimateFleetEta } from "./fleets.js";
+import {
+  isSystemInRange,
+  findColonyShipFleetAt,
+  countColonyShips,
+  estimateFleetEta,
+  findColonizeAssignment,
+  hasAvailableColonyShip,
+} from "./fleets.js";
 import { COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import { COUNCIL_MAJORITY_RATIO } from "./data/diplomacyOptions.js";
@@ -276,12 +283,24 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callba
 
   const guarded = isOrionGuarded(galaxy, system.id);
   const techOk = isColonizable(planet, playerEmpire);
-  // Kolonisierung erfordert ein physisch anwesendes Kolonieschiff (ROADMAP
-  // v0.14) statt einer bloßen Reichweitenprüfung – siehe js/economy.js
-  // colonizePlanet.
+  // Kolonisieren-auf-Zuruf (ROADMAP v0.22, Nutzer-Feedback): steht kein
+  // Kolonieschiff direkt am System, genügt trotzdem ein Klick auf
+  // "Kolonisieren", solange irgendwo ein unzugeteiltes Kolonieschiff
+  // existiert und das Ziel in Treibstoffreichweite liegt – js/economy.js
+  // orderColonization schickt es automatisch los. Ist bereits eines für
+  // GENAU diesen Planeten unterwegs, zeigt die Karte "Kolonieschiff im
+  // Transfer" statt eines erneut klickbaren Buttons.
   const colonyFleet = findColonyShipFleetAt(galaxy, playerEmpire.id, system.id);
+  const assignment = findColonizeAssignment(galaxy, system.id, planet.id);
+  const inRange = isSystemInRange(galaxy, playerEmpire, system);
+  const canDispatch = Boolean(colonyFleet) || (inRange && hasAvailableColonyShip(galaxy, playerEmpire.id));
 
-  if (techOk && !guarded && colonyFleet) {
+  if (assignment) {
+    const hint = document.createElement("div");
+    hint.className = "colonize-hint";
+    hint.textContent = "Kolonieschiff im Transfer";
+    li.appendChild(hint);
+  } else if (techOk && !guarded && canDispatch) {
     const btn = document.createElement("button");
     btn.className = "btn-colonize";
     btn.textContent = "Kolonisieren";
@@ -296,10 +315,10 @@ function buildUncolonizedPlanetCard(system, planet, playerEmpire, galaxy, callba
       hint.textContent = env.techReq > 0
         ? `Erfordert eine Planetologie-Technologie auf Stufe ${env.techReq} (siehe Forschungsdialog).`
         : "Noch nicht kolonisierbar.";
-    } else if (!isSystemInRange(galaxy, playerEmpire, system)) {
+    } else if (!inRange) {
       hint.textContent = `Außerhalb der Treibstoffreichweite (${playerEmpire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC} Parsec ab eigenen Kolonien) – weitere Fuel-Cell-Forschung nötig, um ein Kolonieschiff herzuschicken.`;
     } else {
-      hint.textContent = "Kein Kolonieschiff an diesem System stationiert – eines hierher verlegen.";
+      hint.textContent = "Kein Kolonieschiff verfügbar.";
     }
     li.appendChild(hint);
   }

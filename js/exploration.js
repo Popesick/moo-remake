@@ -7,8 +7,7 @@
 // (kein erneutes Vernebeln). *Vereinfacht:* gilt nur für den Spieler – die
 // KI bleibt allwissend (siehe "MoO KI Verhalten.docx", ROADMAP v0.12).
 import { multiSourceLaneDistances } from "./starlanes.js";
-import { sendFleet } from "./fleets.js";
-import { DEFAULT_TRAVEL_RANGE_PARSEC, PARSEC_PIXELS } from "./data/logistics.js";
+import { sendFleet, isSystemInRange } from "./fleets.js";
 
 const AUTO_EXPLORE_HULL_ID = "small";
 
@@ -84,6 +83,16 @@ export function isFleetEligibleForAutoExplore(fleet, empire) {
 // nächste nicht erkundete System" (Nutzer-Feedback). Läuft für alle
 // Imperien, ist aber praktisch nur für den Spieler relevant, da die KI den
 // Modus nie setzt.
+//
+// *Bugfix*: die Kandidatenauswahl muss dieselbe Treibstoff-Reichweitenprüfung
+// verwenden wie sendFleet unten (js/fleets.js isSystemInRange: Reichweite ab
+// der NÄCHSTEN EIGENEN KOLONIE, nicht ab der aktuellen Flottenposition).
+// Vorher wurde die Kandidatenliste nur nach Distanz AB DER FLOTTE gefiltert
+// – nach ein bis zwei Erkundungssprüngen abseits jeder Kolonie wirkte ein
+// Nachbarsystem aus Flottensicht "nah genug", scheiterte dann aber
+// stillschweigend an sendFleets Treibstoffprüfung (Distanz ab Kolonie), so
+// dass destinationSystemId nie gesetzt wurde und die Flotte einfach stehen
+// blieb, sobald sie einmal weit genug von der Heimatkolonie weg war.
 export function runAutoExplore(galaxy, empire) {
   const fleets = galaxy.fleets.filter(
     (f) => f.ownerEmpireId === empire.id && !f.destinationSystemId && f.autoExplore
@@ -91,7 +100,6 @@ export function runAutoExplore(galaxy, empire) {
   if (fleets.length === 0) return;
 
   const explored = new Set(empire.exploredSystemIds ?? []);
-  const rangePixels = (empire.travelRangeParsec ?? DEFAULT_TRAVEL_RANGE_PARSEC) * PARSEC_PIXELS;
   const claimed = new Set();
 
   for (const fleet of fleets) {
@@ -101,7 +109,8 @@ export function runAutoExplore(galaxy, empire) {
     for (const system of galaxy.systems) {
       if (explored.has(system.id) || claimed.has(system.id)) continue;
       const d = distances.get(system.id);
-      if (d === undefined || d > rangePixels) continue;
+      if (d === undefined) continue;
+      if (!isSystemInRange(galaxy, empire, system)) continue;
       if (d < bestDist) {
         bestDist = d;
         best = system;
