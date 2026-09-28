@@ -597,13 +597,47 @@ spielbar von der Kolonisierung bis zum Sieg.
   Damit sind alle ursprünglich im Techbaum als "(ab v0.5)" markierten
   Spezialfähigkeiten umgesetzt.
 
+- **v0.20 – Taktischere KI im Kampf-Grid**
+  Die KI-Gegnerphase im interaktiven Kampf-Grid (`js/hexcombat.js`
+  `runAiPhase`) wählte bisher (ROADMAP v0.16) für jede Einheit stur das
+  nächstgelegene gegnerische Ziel und feuerte automatisch das
+  Sondergerät (Stasis Field/Black Hole Generator, ROADMAP v0.19) beim
+  erstbesten Angriff ab – unabhängig davon, ob das lohnend war.
+
+  **Zielwahl** (`scoreAiTarget`/`pickAiTarget`): bewertet erreichbare
+  gegnerische Stacks jetzt nach Stackgröße (mehr Schiffe = höhere
+  Priorität), verbleibender HP des vordersten Schiffs (fast zerstörte
+  Stacks werden bevorzugt, um Kills zu sichern), Bedrohungswert
+  (Angriffswert × Stückzahl) und Distanz – statt reiner Nächstenwahl.
+
+  **Sondergerät-Einsatz** (`aiShouldUseSpecialDevice`): Black Hole
+  Generator wird nur noch ausgelöst, wenn Ziel plus gegnerische
+  Nachbareinheiten im Wirkungsbereich zusammen mindestens 2 Schiffe
+  stellen (sonst normales Waffenfeuer, das Gerät bleibt für einen
+  lohnenderen Moment aufgespart); Stasis Field nur gegen die aktuell
+  gefährlichste gegnerische Einheit gefechtsweit (höchster
+  Angriffswert×Stückzahl) und nur, solange sie nicht ohnehin durch
+  normales Feuer gleich fallen würde (HP-Anteil über 30%).
+
+  Verifiziert: KI überspringt Black Hole gezielt bei einem einzelnen
+  1-Schiff-Ziel und nutzt es zuverlässig bei einem lohnenden 4-Schiffe-
+  Stack (3 von 4 Schiffen in einem Schuss vernichtet); Stasis Field
+  friert im Test die stärkste von zwei gleichzeitig erreichbaren
+  gegnerischen Einheiten ein, nicht die schwächere, fast zerstörte
+  daneben; 250-Runden-Regression mit allen v0.19-Spezialfähigkeiten
+  gleichzeitig aktiv lief ohne Fehler; Live-Durchklicken im Kampf-Grid
+  bestätigt fehlerfreies Verhalten.
+
+  *Vereinfacht:* rein additive Gewichtungsformel ohne Berücksichtigung der
+  eigenen Restbewegung/-reichweite über die aktuelle Runde hinaus; gilt nur
+  für die KI-Gegnerseite im Kampf-Grid, der Spieler entscheidet weiterhin
+  selbst, wann er sein eigenes Sondergerät einsetzt (automatisch beim
+  gewählten Angriffsziel, siehe ROADMAP v0.19).
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidaten: KI-Nutzung der neuen Kampf-Grid-Spezialfähigkeiten
-  (die einfache KI-Heuristik aus ROADMAP v0.16 berücksichtigt bislang nur
-  Bewegung/Reichweite/Angriff, nicht gezielt Stasis/Black-Hole-Einsatz oder
-  Repulsor-Positionierung), interaktives Kampf-Grid auch für Guardian-of-
-  Orion- und galaktische Zufallsereignis-Kämpfe
+- Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-
+  und galaktische Zufallsereignis-Kämpfe
 
 ## Grafik-Pipeline
 

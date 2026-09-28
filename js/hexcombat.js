@@ -574,10 +574,65 @@ function moveTowards(battle, unit, target) {
   }
 }
 
-// KI-Phase (ROADMAP v0.16): einfache Heuristik statt der vollen
-// Zielbewertung aus js/ai.js (die für die strategische Karte gilt, nicht
-// das taktische Kampf-Grid) – jede Einheit sucht sich das nächste Ziel,
-// bewegt sich bei Bedarf heran und feuert, sobald es in Reichweite ist.
+// Zielwahl der KI (ROADMAP v0.20): bevorzugt statt des reinen
+// "nächstes Ziel"-Verhaltens aus v0.16 größere, näher am Sterben stehende
+// und gefährlichere gegnerische Stacks – ohne den vollen Attraktivitäts-
+// Apparat aus js/ai.js (der für die strategische Karte gilt, nicht das
+// taktische Kampf-Grid). *Vereinfacht*: rein additive Gewichtung, keine
+// Berücksichtigung der eigenen Restreichweite/-bewegung über diese Runde
+// hinaus.
+function scoreAiTarget(unit, target) {
+  const dist = hexDistance(unit, target);
+  const hpFrac = target.maxHp > 0 ? (target.shipHp[0] ?? 0) / target.maxHp : 1;
+  const threat = (target.attackRating ?? 0) * target.count;
+  return target.count * 3 - dist * 1.5 - hpFrac * 2 + threat * 0.05;
+}
+
+function pickAiTarget(unit, enemies) {
+  let best = null;
+  let bestScore = -Infinity;
+  for (const e of enemies) {
+    const score = scoreAiTarget(unit, e);
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+  return best;
+}
+
+// Entscheidet, ob die KI ihr einmal-pro-Gefecht-Sondergerät (Stasis Field/
+// Black Hole Generator) JETZT auf `target` einsetzen soll, statt es
+// automatisch beim erstbesten Angriffsziel zu verbrauchen (v0.16-Verhalten)
+// – Black Hole nur, wenn genug gegnerische Schiffe im Wirkungsbereich
+// stehen, um den Einsatz zu lohnen; Stasis Field nur gegen die aktuell
+// gefährlichste gegnerische Einheit (höchstes Angriffswert×Stückzahl) und
+// nur, solange sie nicht ohnehin gleich fallen würde.
+function aiShouldUseSpecialDevice(battle, unit, target) {
+  if (!unit.specialDevice || unit.usedSpecial) return false;
+
+  if (unit.specialDevice === "blackHole") {
+    const neighborShips = battle.units
+      .filter((u) => u.count > 0 && u.id !== target.id && u.empireId !== unit.empireId && hexDistance(target, u) <= 1)
+      .reduce((sum, u) => sum + u.count, 0);
+    return target.count + neighborShips >= 2;
+  }
+
+  // Stasis Field
+  const hpFrac = target.maxHp > 0 ? (target.shipHp[0] ?? 0) / target.maxHp : 1;
+  if (hpFrac <= 0.3) return false; // stirbt vermutlich ohnehin gleich – Gerät aufsparen
+  const enemies = battle.units.filter((u) => u.count > 0 && u.empireId === target.empireId);
+  const mostThreatening = enemies.reduce(
+    (best, u) => ((u.attackRating ?? 0) * u.count > (best ? (best.attackRating ?? 0) * best.count : -1) ? u : best),
+    null
+  );
+  return mostThreatening?.id === target.id;
+}
+
+// KI-Phase (ROADMAP v0.16, Zielwahl/Sondergeräte verfeinert in v0.20):
+// jede Einheit wählt ihr Ziel per scoreAiTarget, bewegt sich bei Bedarf
+// heran und feuert (bzw. setzt ihr Sondergerät ein), sobald es in
+// Reichweite ist.
 function runAiPhase(battle) {
   const aiUnits = battle.units.filter((u) => u.empireId === battle.enemyEmpireId && u.count > 0);
   for (const unit of aiUnits) {
@@ -585,24 +640,19 @@ function runAiPhase(battle) {
     const enemies = battle.units.filter((u) => u.empireId === battle.playerEmpireId && u.count > 0);
     if (enemies.length === 0) break;
 
-    let target = null;
-    let bestDist = Infinity;
-    for (const e of enemies) {
-      const d = hexDistance(unit, e);
-      if (d < bestDist) {
-        bestDist = d;
-        target = e;
-      }
-    }
+    const target = pickAiTarget(unit, enemies);
+    let dist = hexDistance(unit, target);
 
     const maxRange = Math.max(0, ...unit.weapons.map((w) => weaponRangeHexes(w.tech, unit.rangeBonus)));
-    if (bestDist > maxRange) {
+    if (dist > maxRange) {
       moveTowards(battle, unit, target);
-      bestDist = hexDistance(unit, target);
+      dist = hexDistance(unit, target);
     }
-    if (bestDist <= maxRange) {
-      if (!maybeTriggerSpecialDevice(battle, unit, target)) {
-        resolveAttack(battle, unit, target, bestDist);
+    if (dist <= maxRange) {
+      if (aiShouldUseSpecialDevice(battle, unit, target) && maybeTriggerSpecialDevice(battle, unit, target)) {
+        // Sondergerät ausgelöst, kein reguläres Waffenfeuer diese Runde.
+      } else {
+        resolveAttack(battle, unit, target, dist);
       }
     }
   }
