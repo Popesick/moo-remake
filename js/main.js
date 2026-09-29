@@ -345,7 +345,11 @@ const shipDesignCallbacks = {
   },
   onScrap(designId) {
     const player = getPlayerEmpire();
-    scrapShipDesign(player, designId);
+    const result = scrapShipDesign(player, designId, gameState.galaxy);
+    if (!result.ok) {
+      shipDesignCallbacks.onError(result.reason);
+      return;
+    }
     renderShipDesignDialog(gameState.galaxy, shipDesignCallbacks);
     refreshSidePanel();
     saveGame();

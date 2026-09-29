@@ -11,6 +11,28 @@ export function findFleetsAt(galaxy, systemId, empireId) {
   return galaxy.fleets.filter((f) => f.systemId === systemId && f.ownerEmpireId === empireId && !f.destinationSystemId);
 }
 
+// Selbstheilung für bereits bestehende Spielstände (ROADMAP v0.28,
+// Nutzer-Feedback: "jede Schlacht endet mit 0 Verlusten auf beiden
+// Seiten"): vor diesem Fix ließ sich ein Schiffsdesign verschrotten,
+// während noch Schiffe dieses Designs im Feld standen (js/shipDesign.js
+// scrapShipDesign verweigert das inzwischen). Solche "Geisterschiffe" ohne
+// passendes Design waren für den Kampf unsichtbar (js/combat.js buildUnits
+// überspringt sie wie Kolonieschiffe) und überlebten dadurch JEDES Gefecht
+// unbeschadet, ohne je mitzukämpfen. Entfernt beim Rundenwechsel
+// vorsorglich alle Stacks, deren designId weder das Kolonieschiff-Sentinel
+// noch ein aktuelles Design des jeweiligen Imperiums ist – die Schiffe
+// gelten als mit ihrem Design verschrottet.
+export function purgeGhostDesignStacks(galaxy) {
+  for (const fleet of galaxy.fleets) {
+    const empire = galaxy.empires.find((e) => e.id === fleet.ownerEmpireId);
+    if (!empire) continue;
+    fleet.stacks = fleet.stacks.filter(
+      (s) => s.designId === COLONY_SHIP_DESIGN_ID || empire.shipDesigns.some((d) => d.id === s.designId)
+    );
+  }
+  galaxy.fleets = galaxy.fleets.filter((f) => f.stacks.length > 0);
+}
+
 // Neue Schiffe entstehen als eigener Stack in einer (neuen oder bestehenden,
 // stationären) Flotte am Bauplaneten-System.
 export function addShipsToSystem(galaxy, empireId, systemId, designId, count) {

@@ -135,8 +135,29 @@ export function addShipDesign(empire, design) {
   return { ok: true, design: entry };
 }
 
-export function scrapShipDesign(empire, designId) {
+// Bugfix (ROADMAP v0.28, Nutzer-Feedback: "kann ich die feindliche Flotte
+// nicht aktiv angreifen ... jede Schlacht endet mit 0 Verlusten auf beiden
+// Seiten"): Verschrotten entfernte das Design bisher bedingungslos, auch
+// wenn noch Schiffe dieses Designs in aktiven Flotten unterwegs waren. Für
+// den Kampf sind solche Schiffe dann unsichtbar (js/combat.js buildUnits
+// überspringt Stacks ohne passendes Design, genau wie bei Kolonieschiffen
+// beabsichtigt) und werden fälschlich als "nicht-kämpfende Fracht"
+// behandelt (js/economy.js applyBattleResult) – sie überleben JEDES
+// Gefecht unbeschadet, kämpfen aber auch nie mit, wodurch eine Partei mit
+// nur noch solchen "Geisterschiffen" am System ein Gefecht mit 0 Runden,
+// 0 Verlusten auf beiden Seiten und einem automatischen Sieger erzeugt
+// (die reale gegnerische Flotte kann diese Geisterschiffe nie erreichen).
+// Verschrotten ist daher blockiert, solange noch Schiffe dieses Designs in
+// irgendeiner eigenen Flotte existieren.
+export function scrapShipDesign(empire, designId, galaxy) {
+  const shipsInService = (galaxy?.fleets ?? []).some(
+    (f) => f.ownerEmpireId === empire.id && f.stacks.some((s) => s.designId === designId && s.count > 0)
+  );
+  if (shipsInService) {
+    return { ok: false, reason: "Design wird noch von Schiffen im Einsatz verwendet und kann nicht verschrottet werden." };
+  }
   empire.shipDesigns = empire.shipDesigns.filter((d) => d.id !== designId);
+  return { ok: true };
 }
 
 export { HULLS };

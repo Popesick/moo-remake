@@ -14,6 +14,7 @@ import {
   findColonizeAssignment,
   findNearestIdleColonyShipFleet,
   extractSingleColonyShip,
+  purgeGhostDesignStacks,
 } from "./fleets.js";
 import { resolveSystemCombat } from "./combat.js";
 import { DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
@@ -155,6 +156,12 @@ export function computePlanetProduction(planet, empire) {
 // Simuliert eine Runde für die gesamte Galaxie: Produktion, Fabrikbau,
 // Verschmutzung, Bevölkerungswachstum, Kolonieschiff-Ansparung, Forschung.
 export function simulateTurn(galaxy) {
+  // Selbstheilung (ROADMAP v0.28): entfernt Geisterschiffe aus bereits
+  // bestehenden Spielständen, bevor irgendetwas anderes diese Runde läuft,
+  // damit auch das Gefecht DIESER Runde schon korrekt aufgelöst wird (siehe
+  // js/fleets.js purgeGhostDesignStacks).
+  purgeGhostDesignStacks(galaxy);
+
   const empireById = new Map(galaxy.empires.map((e) => [e.id, e]));
   const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, defBC: 0, totalBC: 0 }]));
   const turnForAi = galaxy.turn ?? 1;

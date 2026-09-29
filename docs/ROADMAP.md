@@ -972,6 +972,51 @@ spielbar von der Kolonisierung bis zum Sieg.
   Zwei-Imperien-Kampf-Grid per Regressionstest unverändert funktionsfähig
   (`isGuardianBattle: false`). 40-Runden-Regression ohne Fehler.
 
+- **v0.28 – Bugfix: "Geisterschiffe" durch Verschrotten während im Einsatz**
+  Nutzer-Feedback: "Wenn sich zwei Flotten in einem System befinden kann
+  ich die feindliche Flotte nicht aktiv angreifen. Stattdessen endet jede
+  Schlacht mit 0 Verlusten auf beiden Seiten." Nach ausführlicher, zunächst
+  erfolgloser Fehlersuche (direkte Kampf-Engine-Aufrufe, passiver-Spieler-
+  KI-Szenario, vollständiger Klick-Durchlauf durchs echte Kampf-Grid –
+  überall korrektes, entscheidendes Kampfergebnis) lieferte ein vom Nutzer
+  geschickter echter Kampfbericht-Screenshot den entscheidenden Hinweis:
+  Sieger stand fest, aber "0 Schiffe verloren" auf BEIDEN Seiten und
+  "Keine Schiffe zerstört" – ein Kampf mit 0 Runden.
+
+  Ursache: `js/shipDesign.js` `scrapShipDesign` entfernte ein Design bisher
+  bedingungslos aus `empire.shipDesigns`, auch wenn noch Schiffe dieses
+  Designs in aktiven Flotten unterwegs waren (leicht auszulösen, sobald das
+  6-Design-Limit erreicht ist und ein Design verschrottet werden muss, um
+  Platz für ein neues zu schaffen – siehe ROADMAP v0.4). Für den Kampf sind
+  Stacks ohne passendes Design unsichtbar (`js/combat.js` `buildUnits`
+  überspringt sie – dieselbe Logik, die absichtlich Kolonieschiffe vom
+  Kampf ausnimmt) und werden von `js/economy.js` `applyBattleResult`
+  fälschlich als "nicht-kämpfende Fracht" behandelt: sie überleben JEDES
+  Gefecht unbeschadet, kämpfen aber selbst nie mit. Bestand die gegnerische
+  Flotte an einem System nur noch aus solchen Geisterschiffen, erzeugte das
+  einen Kampf mit 0 Runden, 0 Verlusten auf beiden Seiten und einem
+  automatischen Sieger – Runde für Runde erneut, da die Geisterflotte nie
+  verschwand.
+
+  `scrapShipDesign` verweigert das Verschrotten jetzt (mit Fehlermeldung),
+  solange noch Schiffe dieses Designs in einer eigenen Flotte existieren.
+  Für bereits bestehende, davon betroffene Spielstände sorgt die neue
+  `js/fleets.js` `purgeGhostDesignStacks` (aufgerufen ganz zu Beginn jeder
+  `simulateTurn`, noch vor der Kampfauflösung derselben Runde) dafür, dass
+  vorhandene Geisterschiff-Stacks entfernt werden – erkannt daran, dass
+  ihre designId weder das Kolonieschiff-Sentinel noch ein aktuelles Design
+  ihres Imperiums ist.
+
+  Verifiziert: `scrapShipDesign` blockiert das Verschrotten eines
+  Designs mit Schiffen im Feld (per direktem Aufruf UND über einen echten
+  Klick auf "Verschrotten" in der Live-UI, inkl. korrekter Fehlermeldung
+  in der Kopfleiste) und erlaubt es wieder, sobald keine Schiffe dieses
+  Designs mehr existieren; `purgeGhostDesignStacks` entfernt eine
+  reproduzierte Geisterflotte korrekt (kein Geister-Fleet-Rest, kein
+  fauler 0-Runden-Kampfbericht mehr), lässt Kolonieschiff-Stacks
+  unangetastet (9 vor/nach Testlauf) und die reale eigene Flotte
+  unverändert. 40-Runden-Regression ohne Fehler.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für galaktische
