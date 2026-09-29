@@ -18,6 +18,7 @@ import {
   estimateFleetEta,
   findColonizeAssignment,
   hasAvailableColonyShip,
+  fleetTotalShips,
 } from "./fleets.js";
 import { COLONY_SHIP_DESIGN_ID } from "./data/economy.js";
 import { SPY_ACTIONS, MAX_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
@@ -449,20 +450,6 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
       const row = document.createElement("div");
       row.className = "fleet-stack-row";
       row.innerHTML = `<span>${stack.count}× ${stackName}</span>`;
-      if (stack.count > 1) {
-        const splitInput = document.createElement("input");
-        splitInput.type = "number";
-        splitInput.min = "1";
-        splitInput.max = String(stack.count - 1);
-        splitInput.value = "1";
-        const splitBtn = document.createElement("button");
-        splitBtn.textContent = "Aufteilen";
-        splitBtn.addEventListener("click", () => {
-          callbacks.onSplitStack(fleet.id, stack.designId, Number(splitInput.value));
-        });
-        row.appendChild(splitInput);
-        row.appendChild(splitBtn);
-      }
       card.appendChild(row);
     }
 
@@ -472,6 +459,17 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
     moveBtn.textContent = "Verlegen (Ziel auf Karte klicken)";
     moveBtn.addEventListener("click", () => callbacks.onArmFleetMove(fleet.id));
     actions.appendChild(moveBtn);
+
+    // Aufteilen-Dialog (ROADMAP v0.26, Nutzer-Feedback): ersetzt die alte
+    // Ein-Stack-pro-Klick-Eingabe, bei der es bei mehreren Schiffstypen in
+    // einer Flotte leicht passieren konnte, versehentlich den falschen Stack
+    // zu splitten ("gefühlt zufällig ein Schiff entfernt").
+    if (fleetTotalShips(fleet) > 1) {
+      const splitBtn = document.createElement("button");
+      splitBtn.textContent = "Aufteilen";
+      splitBtn.addEventListener("click", () => callbacks.onOpenSplitFleet(fleet.id));
+      actions.appendChild(splitBtn);
+    }
 
     // Auto-Erkundung (ROADMAP v0.15, Nutzerwunsch): nur für Flotten aus
     // reinen Small-Rumpf-Schiffen. Fliegt automatisch jede Runde zum
@@ -502,6 +500,95 @@ function renderFleetSection(system, galaxy, playerEmpire, callbacks) {
   }
 
   container.appendChild(section);
+}
+
+// Aufteilen-Dialog (ROADMAP v0.26, Nutzer-Feedback): zwei Spalten,
+// "Bestehende Flotte" (links, mit +/- pro Zeile) und "Neue Flotte" (rechts,
+// reine Anzeige). "-" verschiebt ein Schiff dieses Typs von links nach
+// rechts, "+" wieder zurück. Die Verschiebung ist rein clientseitig
+// (splitFleetDraft), bis "OK" sie in einem Rutsch über
+// callbacks.onConfirmSplitFleet anwendet – so kann nichts "versehentlich"
+// verschoben werden wie bei der alten Ein-Klick-pro-Stack-Eingabe.
+let splitFleetDraft = null; // { fleetId, counts: { [designId]: { left, right } } }
+
+function ensureSplitFleetDraft(fleet) {
+  if (splitFleetDraft?.fleetId === fleet.id) return splitFleetDraft;
+  const counts = {};
+  for (const stack of fleet.stacks) {
+    counts[stack.designId] = { left: stack.count, right: 0 };
+  }
+  splitFleetDraft = { fleetId: fleet.id, counts };
+  return splitFleetDraft;
+}
+
+export function renderSplitFleetDialog(fleet, empire, callbacks) {
+  const draft = ensureSplitFleetDraft(fleet);
+
+  const leftEl = document.getElementById("splitfleet-left");
+  const rightEl = document.getElementById("splitfleet-right");
+  leftEl.innerHTML = "";
+  rightEl.innerHTML = "";
+
+  const stackIds = Object.keys(draft.counts);
+  const rightHasAny = stackIds.some((id) => draft.counts[id].right > 0);
+  if (!rightHasAny) {
+    const empty = document.createElement("p");
+    empty.className = "dialog-hint";
+    empty.textContent = "Keine Schiffe ausgewählt.";
+    rightEl.appendChild(empty);
+  }
+
+  for (const designId of stackIds) {
+    const { left, right } = draft.counts[designId];
+    const name = stackDisplayName({ designId }, empire);
+
+    const leftRow = document.createElement("div");
+    leftRow.className = "splitfleet-row";
+    leftRow.innerHTML = `<span>${left}× ${name}</span>`;
+    const minusBtn = document.createElement("button");
+    minusBtn.textContent = "−";
+    minusBtn.disabled = left <= 0;
+    minusBtn.addEventListener("click", () => {
+      draft.counts[designId].left -= 1;
+      draft.counts[designId].right += 1;
+      renderSplitFleetDialog(fleet, empire, callbacks);
+    });
+    const plusBtn = document.createElement("button");
+    plusBtn.textContent = "+";
+    plusBtn.disabled = right <= 0;
+    plusBtn.addEventListener("click", () => {
+      draft.counts[designId].left += 1;
+      draft.counts[designId].right -= 1;
+      renderSplitFleetDialog(fleet, empire, callbacks);
+    });
+    leftRow.appendChild(minusBtn);
+    leftRow.appendChild(plusBtn);
+    leftEl.appendChild(leftRow);
+
+    if (right > 0) {
+      const rightRow = document.createElement("div");
+      rightRow.className = "splitfleet-row";
+      rightRow.innerHTML = `<span>${right}× ${name}</span>`;
+      rightEl.appendChild(rightRow);
+    }
+  }
+
+  const okBtn = document.getElementById("splitfleet-ok");
+  okBtn.onclick = () => {
+    const transfers = {};
+    for (const designId of stackIds) transfers[designId] = draft.counts[designId].right;
+    splitFleetDraft = null;
+    callbacks.onConfirmSplitFleet(fleet.id, transfers);
+  };
+}
+
+export function openSplitFleetDialog() {
+  document.getElementById("splitfleet-dialog").hidden = false;
+}
+
+export function closeSplitFleetDialog() {
+  splitFleetDraft = null;
+  document.getElementById("splitfleet-dialog").hidden = true;
 }
 
 // Kopfleiste (ROADMAP v0.21): zeigt bewusst nur noch die Runde – Seed und

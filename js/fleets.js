@@ -114,25 +114,47 @@ export function recallFleet(galaxy, fleetId) {
   return { ok: true };
 }
 
-// Splittet einen Stack (gleiches Design) in eine neue, stationäre Flotte am
-// selben System ab, um Teilstreitkräfte separat verlegen zu können (siehe
-// design-analyse.docx "Stack-Splitting").
-export function splitStack(galaxy, fleetId, designId, splitCount) {
+// Aufteilen-Dialog (ROADMAP v0.26, Nutzer-Feedback): spaltet mehrere
+// Schiffstypen einer Flotte gleichzeitig in eine neue, stationäre Flotte am
+// selben System ab. `transfers` ist eine {designId: Anzahl}-Zuordnung, wie
+// viele Schiffe jedes Typs in die neue Flotte wandern sollen (js/ui.js
+// renderSplitFleetDialog baut diese Zuordnung über +/- Buttons interaktiv
+// auf, bevor sie hier atomar angewendet wird). Ersetzt das alte
+// Ein-Stack-pro-Klick splitStack, das bei mehreren Schiffstypen in einer
+// Flotte leicht dazu führte, versehentlich den falschen Stack zu splitten.
+export function splitFleetMulti(galaxy, fleetId, transfers) {
   const fleet = galaxy.fleets.find((f) => f.id === fleetId);
   if (!fleet) return { ok: false, reason: "Flotte nicht gefunden." };
-  const stack = fleet.stacks.find((s) => s.designId === designId);
-  if (!stack || splitCount <= 0 || splitCount >= stack.count) {
-    return { ok: false, reason: "Ungültige Aufteilung." };
+
+  const entries = Object.entries(transfers).filter(([, count]) => count > 0);
+  if (entries.length === 0) return { ok: false, reason: "Keine Schiffe zum Abspalten ausgewählt." };
+
+  for (const [designId, count] of entries) {
+    const stack = fleet.stacks.find((s) => s.designId === designId);
+    if (!stack || count > stack.count) return { ok: false, reason: "Ungültige Aufteilung." };
   }
-  stack.count -= splitCount;
+
+  const newStacks = [];
+  for (const [designId, count] of entries) {
+    const stack = fleet.stacks.find((s) => s.designId === designId);
+    stack.count -= count;
+    newStacks.push({ designId, count });
+  }
+  fleet.stacks = fleet.stacks.filter((s) => s.count > 0);
+
   const newFleet = {
     id: nextFleetId(galaxy),
     ownerEmpireId: fleet.ownerEmpireId,
     systemId: fleet.systemId,
     destinationSystemId: null,
-    stacks: [{ designId, count: splitCount }],
+    stacks: newStacks,
   };
   galaxy.fleets.push(newFleet);
+
+  if (fleet.stacks.length === 0) {
+    galaxy.fleets = galaxy.fleets.filter((f) => f.id !== fleet.id);
+  }
+
   return { ok: true, fleet: newFleet };
 }
 

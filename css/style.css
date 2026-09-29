@@ -703,6 +703,44 @@ button:hover {
   font-weight: 600;
 }
 
+.splitfleet-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.splitfleet-col h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.splitfleet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  background: #10182c;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.splitfleet-row button {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.splitfleet-row button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .battle-log {
   white-space: pre-line;
   font-size: 0.72rem;

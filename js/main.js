@@ -9,7 +9,7 @@ import { renderHexCombat, resetHexCombatSelection } from "./renderHexCombat.js";
 import { normalizeSliders, normalizeSlidersWithLocks } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
-import { sendFleet, splitStack, mergeFleets } from "./fleets.js";
+import { sendFleet, splitFleetMulti, mergeFleets } from "./fleets.js";
 import { DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import {
   getRelation,
@@ -69,6 +69,9 @@ import {
   renderPlanetsDialog,
   openPlanetsDialog,
   closePlanetsDialog,
+  renderSplitFleetDialog,
+  openSplitFleetDialog,
+  closeSplitFleetDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -148,14 +151,11 @@ const panelCallbacks = {
     refreshSidePanel();
     saveGame();
   },
-  onSplitStack(fleetId, designId, count) {
-    const result = splitStack(gameState.galaxy, fleetId, designId, count);
-    if (!result.ok) {
-      flashTopbar(result.reason);
-      return;
-    }
-    refreshSidePanel();
-    saveGame();
+  onOpenSplitFleet(fleetId) {
+    const fleet = gameState.galaxy.fleets.find((f) => f.id === fleetId);
+    if (!fleet) return;
+    renderSplitFleetDialog(fleet, getPlayerEmpire(), splitFleetCallbacks);
+    openSplitFleetDialog();
   },
   onMergeFleets(fleetIds) {
     const result = mergeFleets(gameState.galaxy, fleetIds);
@@ -234,6 +234,22 @@ const panelCallbacks = {
     flashTopbar(
       `Bioangriff: ${result.casualties.toFixed(1)} Mio. Opfer${result.depopulated ? ", Planet entvölkert" : ""}${result.newWars > 0 ? ` · ${result.newWars} neue Kriegserklärung(en)` : ""}.`
     );
+  },
+};
+
+const splitFleetCallbacks = {
+  onConfirmSplitFleet(fleetId, transfers) {
+    closeSplitFleetDialog();
+    const hasAny = Object.values(transfers).some((n) => n > 0);
+    if (!hasAny) return;
+    const result = splitFleetMulti(gameState.galaxy, fleetId, transfers);
+    if (!result.ok) {
+      flashTopbar(result.reason);
+      return;
+    }
+    refreshSidePanel();
+    saveGame();
+    flashTopbar("Flotte aufgeteilt.");
   },
 };
 
@@ -837,6 +853,8 @@ function setupDialogAndButtons() {
     openPlanetsDialog();
   });
   document.getElementById("planets-close").addEventListener("click", closePlanetsDialog);
+
+  document.getElementById("splitfleet-cancel").addEventListener("click", closeSplitFleetDialog);
 
   document.getElementById("btn-home").addEventListener("click", goToHomeSystem);
 

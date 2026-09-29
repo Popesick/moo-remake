@@ -409,6 +409,18 @@ function resolveAllCombats(galaxy) {
     const empireIds = [...new Set(fleetsHere.map((f) => f.ownerEmpireId))];
     if (empireIds.length < 2) continue;
 
+    // Erkundungsflotten greifen nicht an (ROADMAP v0.26, Nutzer-Feedback:
+    // "Schiffe im Erkundungsmodus attackieren keine feindlichen Schiffe").
+    // Sind an diesem System AUSSCHLIESSLICH Erkunder-Flotten (autoExplore)
+    // verschiedener, verfeindeter Imperien anwesend, löst das keinen Kampf
+    // aus – sie koexistieren friedlich. Sobald mindestens ein Imperium hier
+    // auch nur eine reguläre (nicht erkundende) Flotte stehen hat, gilt der
+    // normale Kampf wie gehabt, inklusive etwaiger mit anwesender
+    // Erkunder-Flotten, die dabei durchaus zerstört werden können ("können
+    // aber attackiert werden").
+    const activeEmpireIds = new Set(fleetsHere.filter((f) => !f.autoExplore).map((f) => f.ownerEmpireId));
+    if (activeEmpireIds.size === 0) continue;
+
     // Vereinfachung: Kampf löst nur aus, wenn sich ALLE hier anwesenden
     // Imperien paarweise im Krieg befinden (kein Nichtangriffspakt-Dreieck).
     let allAtWar = true;

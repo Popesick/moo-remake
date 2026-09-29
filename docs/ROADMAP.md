@@ -879,6 +879,58 @@ spielbar von der Kolonisierung bis zum Sieg.
   freien Reglern, Zustand ist danach im echten Planeten-Objekt persistiert
   und übersteht 40 simulierte Runden unverändert.
 
+- **v0.26 – Flotten aufteilen neu gestaltet & friedliche Erkundung**
+  Nutzer-Feedback: der Aufteilen-Befehl fühlte sich an, als würde er ein
+  zufälliges Schiff entfernen – Ursache war die alte Inline-Eingabe (ein
+  Zahlenfeld + eigener "Aufteilen"-Button PRO Schiffstyp-Zeile einer
+  Flotte): bei mehreren Schiffstypen in einer Flotte war leicht der
+  falsche Zeilen-Button getroffen, ohne dass vorher klar war, wie viele
+  Schiffe dieser Typ überhaupt gerade hatte.
+
+  **Neuer Aufteilen-Dialog** (`#splitfleet-dialog`, `js/ui.js`
+  `renderSplitFleetDialog`): ein Klick auf "Aufteilen" (jetzt ein
+  einzelner Button pro Flotte, nicht mehr pro Stack) öffnet ein Fenster
+  mit zwei Spalten. Links die "Bestehende Flotte" mit "−"/"+" hinter jeder
+  Zeile, rechts die reine Anzeige der "Neuen Flotte". "−" verschiebt ein
+  Schiff dieses Typs nach rechts, "+" wieder zurück; beide Buttons sind
+  deaktiviert, wenn auf der jeweiligen Seite nichts zu verschieben ist.
+  Die Verschiebung ist rein clientseitig (Entwurf im Dialog), bis "OK" sie
+  in einem Rutsch über die neue `js/fleets.js` `splitFleetMulti(galaxy,
+  fleetId, transfers)` anwendet – transfers ist eine
+  {designId: Anzahl}-Zuordnung für BELIEBIG viele Schiffstypen auf einmal,
+  ersetzt das alte `splitStack` (nur ein Typ pro Aufruf). "Abbrechen"
+  verwirft den Entwurf.
+
+  **Auto-Erkundung in umkämpftem Gebiet** (Nutzer-Feedback: "die Schiffe
+  sollen immer nach unentdeckten Systemen suchen und diese auch anfliegen,
+  auch wenn diese in feindlichen ... Gebieten liegen"): Sternenstraßen-
+  Pfadfindung und Treibstoffreichweiten-Prüfung kannten ohnehin keine
+  Gebietsgrenzen – blockiert wurde de facto nur durch das anschließende
+  Gefecht, wenn eine Erkunder-Flotte an einem von feindlichen Kampfflotten
+  besetzten System landete und dort zerstört wurde. Neue Regel in
+  `js/economy.js` `resolveAllCombats`: sind an einem System AUSSCHLIESSLICH
+  Erkunder-Flotten (`fleet.autoExplore === true`) verschiedener,
+  verfeindeter Imperien anwesend, löst das KEIN Gefecht aus – sie
+  koexistieren friedlich ("Schiffe im Erkundungsmodus attackieren keine
+  feindlichen Schiffe"). Sobald mindestens ein Imperium dort auch nur eine
+  reguläre (nicht erkundende) Flotte stehen hat, gilt der normale Kampf wie
+  gehabt – anwesende Erkunder-Flotten kämpfen dann mit und können dabei
+  zerstört werden ("können aber attackiert werden"). Die
+  Auto-Erkundungs-Berechtigung selbst (nur reine Small-Rumpf-Flotten, siehe
+  `isFleetEligibleForAutoExplore`, ROADMAP v0.15) war bereits korrekt und
+  blieb unverändert.
+
+  Verifiziert: `splitFleetMulti` und die neue Dialog-Logik per direktem
+  Modul-Aufruf (Mehrfach-Stack-Flotte, +/- Buttons bewegen die richtige
+  Anzahl in beide Richtungen, Buttons korrekt deaktiviert, OK wendet den
+  Entwurf exakt an); vollständiger Durchlauf über echte Klicks in der
+  Live-UI inkl. Speicherung. Kampf-Ausnahme per direktem
+  `simulateTurn`-Aufruf in zwei Szenarien verifiziert: zwei verfeindete
+  reine Erkunder-Flotten am selben System erzeugen keinen Kampfbericht und
+  überleben beide; eine Erkunder- und eine reguläre feindliche Flotte am
+  selben System lösen weiterhin normalen Kampf aus. 50-Runden-Regression
+  über die echte `simulateTurn`-Kette ohne Fehler.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-

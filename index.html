@@ -188,6 +188,30 @@
       </div>
     </div>
 
+    <div id="splitfleet-dialog" class="dialog-overlay" hidden>
+      <div class="dialog dialog-wide">
+        <h2>Flotte aufteilen</h2>
+        <p class="dialog-hint">
+          "−" verschiebt ein Schiff dieses Typs in die neue Flotte rechts,
+          "+" wieder zurück. Übernommen wird erst mit OK.
+        </p>
+        <div class="splitfleet-columns">
+          <div class="splitfleet-col">
+            <h3>Bestehende Flotte</h3>
+            <div id="splitfleet-left"></div>
+          </div>
+          <div class="splitfleet-col">
+            <h3>Neue Flotte</h3>
+            <div id="splitfleet-right"></div>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button id="splitfleet-cancel">Abbrechen</button>
+          <button id="splitfleet-ok" class="btn-cta">OK</button>
+        </div>
+      </div>
+    </div>
+
     <div id="diplomacy-dialog" class="dialog-overlay" hidden>
       <div class="dialog dialog-wide">
         <h2>Diplomatie &amp; Spionage</h2>
