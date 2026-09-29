@@ -1017,6 +1017,66 @@ spielbar von der Kolonisierung bis zum Sieg.
   unangetastet (9 vor/nach Testlauf) und die reale eigene Flotte
   unverändert. 40-Runden-Regression ohne Fehler.
 
+- **v0.29 – Schiffsgrafiken (Schiffsdesigner, Kampf-Grid, Galaxiekarte)**
+  Nutzerwunsch: eine Vorstellung davon bekommen, wie die eigenen
+  Schiffsdesigns tatsächlich aussehen, statt nur abstrakte Statistiken zu
+  sehen – plus Guardian-Grafik und größenabhängige Darstellung auf der
+  Galaxiekarte als Folgewunsch.
+
+  **Grafik-Pipeline** (siehe Abschnitt unten): 40 Bilder (10 Rassen × 4
+  Rumpfklassen) plus ein Guardian-of-Orion-Bild wurden über ChatGPT
+  erzeugt – aus Effizienzgründen NICHT einzeln, sondern pro Rasse als ein
+  Sammelbild mit allen 4 Rumpfgrößen nebeneinander in einer Reihe
+  (deutlicher Größenunterschied, große Lücken zwischen den Schiffen),
+  anschließend automatisiert per Alphakanal-Spaltenanalyse
+  (zusammenhängende nicht-transparente Spaltenbereiche = ein Schiff) in
+  vier Einzelbilder zerlegt, auf den Inhalt zugeschnitten und auf max.
+  640px Kantenlänge verkleinert. Wo die beiden größten Schiffe eines
+  Sammelbilds sich perspektivisch leicht überlappten, wurde die
+  Spaltengrenze am lokalen Minimum der Alpha-Deckung manuell gesetzt statt
+  automatisch erkannt; eine Flutfüllungs-Bereinigung (größte
+  zusammenhängende Bildregion behalten, Rest transparent) entfernt dabei
+  entstandene einzelne Bildfetzen des Nachbarschiffs.
+
+  **Schiffsdesigner** (`js/shipArt.js` neuer `shipArtPath(raceId, hullId)`
+  Helfer, `assets/images/ships/ship_<rasse>_<rumpf>.png`): der
+  Design-Editor zeigt jetzt eine große Vorschau, die sich beim Wechsel des
+  Rumpf-Dropdowns aktualisiert – Panzerung/Schild/Antrieb/Waffen verändern
+  die Grafik bewusst NICHT, nur Rasse und Rumpfklasse. Bereits erstellte
+  Designs zeigen in der Liste zusätzlich ein kleines Vorschaubild.
+
+  **Interaktives Kampf-Grid** (`js/renderHexCombat.js`): die bisherigen
+  farbigen Kreise als Einheiten-Symbol sind durch die tatsächliche
+  Schiffsgrafik ersetzt (Rumpfklasse aus dem jeweiligen Schiffsdesign des
+  Besitzer-Imperiums aufgelöst), mit einem gedämpften farbigen Sockel
+  darunter zur schnellen Freund/Feind-Unterscheidung. Der Guardian of
+  Orion (ROADMAP v0.27, kein Eintrag in `galaxy.empires`) bekommt sein
+  eigenes, bewusst noch größer skaliertes Bild. Skalierung pro
+  Rumpfklasse: Small 1,0× / Medium 1,3× / Large 1,7× / Huge 2,1× der
+  Hexfeldgröße, Guardian 2,6×. Bilder werden bei erstem Gebrauch geladen
+  und gecacht; bis zum Laden zeichnet ein Platzhalter-Kreis weiter, damit
+  nie eine leere Fläche erscheint.
+
+  **Galaxiekarte** (`js/render.js`, Nutzerwunsch: "Die Größe der Schiffe
+  sollte sich auf der Strategiekarte widerspiegeln"): der bisherige, für
+  alle Flotten gleich große Dreiecks-Marker (stationär wie unterwegs) ist
+  jetzt nach der größten am System anwesenden Rumpfklasse skaliert
+  (dieselben Faktoren wie im Kampf-Grid, ohne den Guardian-Sonderfall, da
+  er nicht als Flotte existiert). Volle Schiffsgrafiken auf der stark
+  ausgezoomten Übersichtskarte wären bei der bestehenden
+  System-Sammelmarker-Darstellung (ein Marker pro System, alle dortigen
+  Flotten zusammengefasst) zu klein und unruhig – die Größenskalierung des
+  bestehenden Symbols ist die bewusst gewählte, einfachere Umsetzung.
+
+  Verifiziert: Schiffsdesigner-Vorschau zeigt beim Rumpfwechsel korrekt
+  das passende Bild (per echtem Dropdown-Wechsel in der Live-UI,
+  inkl. Design-Listen-Thumbnail nach dem Erstellen); Kampf-Grid zeigt die
+  Schiffsgrafik statt des Kreises in einem echten Gefecht; Karten-Marker
+  für eine Huge- vs. eine Small-Rumpf-Flotte exakt mit dem erwarteten
+  Skalierungsfaktor (2,2× bzw. 1×) verifiziert und im direkten
+  Karten-Screenshot-Vergleich sichtbar unterschiedlich groß. 40-Runden-
+  Regression ohne Fehler.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für galaktische
@@ -1025,7 +1085,7 @@ spielbar von der Kolonisierung bis zum Sieg.
 
 ## Grafik-Pipeline
 
-Rassen-Portraits und Planeten-Umwelt-Icons wurden über ChatGPT
-(Bildgenerierung, via Claude-in-Chrome-Erweiterung im eingeloggten Account)
-erzeugt und liegen unter `assets/images/`. Schiffs-Sprites folgen bei
-Bedarf nach demselben Verfahren.
+Rassen-Portraits, Planeten-Umwelt-Icons und Schiffsgrafiken (Schiffsdesigner/
+Kampf-Grid/Galaxiekarte, ROADMAP v0.29) wurden über ChatGPT (Bildgenerierung,
+via Claude-in-Chrome-Erweiterung im eingeloggten Account) erzeugt und liegen
+unter `assets/images/`.

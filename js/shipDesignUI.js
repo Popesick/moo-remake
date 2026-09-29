@@ -1,5 +1,6 @@
 import { HULLS } from "./data/hulls.js";
 import { modulesOfKind, computeDesignStats } from "./shipDesign.js";
+import { shipArtPath } from "./shipArt.js";
 
 let editorState = null;
 
@@ -17,9 +18,14 @@ function buildDesignRow(design, onScrap, empire) {
   row.className = "design-row";
   const weaponSummary = stats.weaponLines.map((w) => `${w.count}× ${w.tech.name}`).join(", ") || "keine Waffen";
   row.innerHTML = `
-    <div class="design-row-head"><strong>${design.name}</strong><span>${stats.hull.name}</span></div>
-    <div class="design-row-stats">HP ${fmt(stats.hp)} · Schild ${stats.shieldAbsorption} · Tempo ${stats.speed} Parsec · ${fmt(stats.costBC)} BC · Platz ${stats.spaceUsed}/${stats.spaceTotal}</div>
-    <div class="design-row-stats">${weaponSummary}</div>
+    <div class="design-row-main">
+      <img class="design-row-thumb" src="${shipArtPath(empire.raceId, design.hullId)}" alt="" />
+      <div>
+        <div class="design-row-head"><strong>${design.name}</strong><span>${stats.hull.name}</span></div>
+        <div class="design-row-stats">HP ${fmt(stats.hp)} · Schild ${stats.shieldAbsorption} · Tempo ${stats.speed} Parsec · ${fmt(stats.costBC)} BC · Platz ${stats.spaceUsed}/${stats.spaceTotal}</div>
+        <div class="design-row-stats">${weaponSummary}</div>
+      </div>
+    </div>
   `;
   const scrapBtn = document.createElement("button");
   scrapBtn.textContent = "Verschrotten";
@@ -103,6 +109,17 @@ export function renderShipDesignDialog(galaxy, callbacks) {
       false
     )
   );
+
+  // Schiffsgrafik (ROADMAP v0.29, Nutzerwunsch): zeigt Rasse+Rumpf des
+  // gerade gewählten Designs, unabhängig von Panzerung/Schild/Antrieb/
+  // Waffen – nur der Rumpf-Dropdown ändert das Bild.
+  const artWrap = document.createElement("div");
+  artWrap.className = "shipdesign-art";
+  const artImg = document.createElement("img");
+  artImg.src = shipArtPath(player.raceId, editorState.hullId);
+  artImg.alt = "";
+  artWrap.appendChild(artImg);
+  editorEl.appendChild(artWrap);
   editorEl.appendChild(
     buildSelect("armor", "Panzerung", armorOptions, editorState.armorId, (v) => {
       editorState.armorId = v;

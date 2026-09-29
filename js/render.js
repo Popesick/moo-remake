@@ -240,6 +240,22 @@ function fleetShipCount(fleet) {
   return fleet.stacks.reduce((sum, s) => sum + s.count, 0);
 }
 
+// Kartenmarker-Größe nach größter anwesender Rumpfklasse (ROADMAP v0.29,
+// Nutzerwunsch: "Die Größe der Schiffe sollte sich auf der Strategiekarte
+// widerspiegeln"). Kolonieschiffe und Stacks ohne auffindbares Design
+// (kein reguläres Schiffsdesign, siehe js/shipDesign.js) zählen nicht mit.
+const HULL_MARKER_SCALE = { small: 1, medium: 1.3, large: 1.7, huge: 2.2 };
+
+function fleetMarkerScale(fleet, owner) {
+  let maxScale = 1;
+  for (const stack of fleet.stacks) {
+    const design = owner?.shipDesigns.find((d) => d.id === stack.designId);
+    const scale = design ? (HULL_MARKER_SCALE[design.hullId] ?? 1) : 1;
+    if (scale > maxScale) maxScale = scale;
+  }
+  return maxScale;
+}
+
 // Nebel des Krieges (ROADMAP v0.15): fremde Flotten nur zeigen, wenn ihr
 // aktueller Standort (bzw. bei Reisenden Start- oder Zielsystem der
 // aktuellen Etappe) für den Spieler sichtbar ist. Eigene Flotten stehen
@@ -275,18 +291,20 @@ function renderFleets(ctx, galaxy, camera, visible) {
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
+      const travelScale = fleetMarkerScale(fleet, owner);
+      const th = 4 * travelScale;
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.moveTo(fp.x, fp.y - 4);
-      ctx.lineTo(fp.x + 4, fp.y + 3);
-      ctx.lineTo(fp.x - 4, fp.y + 3);
+      ctx.moveTo(fp.x, fp.y - th);
+      ctx.lineTo(fp.x + th, fp.y + th * 0.75);
+      ctx.lineTo(fp.x - th, fp.y + th * 0.75);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     } else {
       if (visible && !visible.has(fleet.systemId)) continue;
       const list = bySystem.get(fleet.systemId) ?? [];
-      list.push({ fleet, color });
+      list.push({ fleet, color, owner });
       bySystem.set(fleet.systemId, list);
     }
   }
@@ -297,19 +315,21 @@ function renderFleets(ctx, galaxy, camera, visible) {
     const p = worldToScreen(camera, system.x, system.y);
     const totalShips = entries.reduce((sum, e) => sum + fleetShipCount(e.fleet), 0);
     if (totalShips === 0) continue;
+    const markerScale = entries.reduce((max, e) => Math.max(max, fleetMarkerScale(e.fleet, e.owner)), 1);
+    const mh = 4 * markerScale;
     const markerX = p.x - 12;
     const markerY = p.y + 12;
     ctx.fillStyle = entries[0].color;
     ctx.beginPath();
-    ctx.moveTo(markerX, markerY - 4);
-    ctx.lineTo(markerX + 4, markerY + 3);
-    ctx.lineTo(markerX - 4, markerY + 3);
+    ctx.moveTo(markerX, markerY - mh);
+    ctx.lineTo(markerX + mh, markerY + mh * 0.75);
+    ctx.lineTo(markerX - mh, markerY + mh * 0.75);
     ctx.closePath();
     ctx.fill();
     if (camera.zoom > 0.5) {
       ctx.fillStyle = "#aab4d6";
       ctx.font = "9px sans-serif";
-      ctx.fillText(String(totalShips), markerX + 6, markerY + 3);
+      ctx.fillText(String(totalShips), markerX + mh + 2, markerY + mh * 0.75);
     }
   }
 }

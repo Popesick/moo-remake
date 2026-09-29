@@ -586,6 +586,36 @@ button:hover {
   font-size: 0.9rem;
 }
 
+.design-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.design-row-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.shipdesign-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+  margin: 0.4rem 0 0.8rem;
+  background: radial-gradient(ellipse at center, var(--accent-soft) 0%, transparent 70%);
+  border-radius: var(--radius);
+}
+
+.shipdesign-art img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5));
+}
+
 .design-row-stats {
   font-size: 0.75rem;
   color: var(--text-dim);

@@ -2,6 +2,35 @@
 // auf dem Canvas in Battle-Aktionen (Auswahl, Bewegung, Angriff). Analog zu
 // js/render.js für die Galaxiekarte, nur für die taktische Hexfeld-Ansicht.
 import { GRID_COLS, GRID_ROWS, reachableTiles, attackableTargets } from "./hexcombat.js";
+import { shipArtPath, GUARDIAN_ART_PATH } from "./shipArt.js";
+
+// Schiffsgrafiken im Kampf-Grid (ROADMAP v0.29, Nutzerwunsch): Bilder
+// werden bei erstem Gebrauch geladen und gecacht; bis ein Bild fertig
+// geladen ist, zeichnet renderHexCombat unten den alten farbigen Kreis als
+// Platzhalter weiter, damit nie eine leere Fläche erscheint. Ein
+// Neuzeichnen nach dem Laden ist nicht nötig – renderHexCombat läuft
+// ohnehin bei jeder Spieleraktion erneut, und ein einzelnes verpasstes
+// Bild in einem sonst statischen Frame fällt kaum auf.
+const shipImageCache = new Map();
+function getShipImage(path) {
+  let img = shipImageCache.get(path);
+  if (!img) {
+    img = new Image();
+    img.onload = () => {
+      if (currentBattle) renderHexCombat(currentBattle, currentGalaxy, currentCallbacks);
+    };
+    img.src = path;
+    shipImageCache.set(path, img);
+  }
+  return img;
+}
+
+// Größenfaktor pro Rumpfklasse relativ zur Hexfeldgröße (ROADMAP v0.29,
+// Nutzerwunsch: "Die Größe der Schiffe sollte sich auf der Strategiekarte
+// widerspiegeln" – dieselbe Skalierung gilt hier fürs Kampf-Grid). Der
+// Guardian of Orion ist bewusst noch größer als ein Huge-Rumpf.
+const HULL_ART_SCALE = { small: 1.0, medium: 1.3, large: 1.7, huge: 2.1 };
+const GUARDIAN_ART_SCALE = 2.6;
 
 const MAX_HEX_SIZE = 30;
 const MIN_HEX_SIZE = 14;
@@ -178,10 +207,39 @@ export function renderHexCombat(battle, galaxy, callbacks) {
 
     const isFrozen = unit.frozenRounds > 0;
     ctx.globalAlpha = isFrozen || (unit.hasMoved && unit.hasActed) ? 0.5 : 1;
+
+    // Kleiner farbiger Sockel unter dem Schiff, damit die Zugehörigkeit
+    // (Spieler/Gegner) auch bei ähnlich aussehenden Rassenbildern sofort
+    // erkennbar bleibt – die Grafik selbst ersetzt seit ROADMAP v0.29 den
+    // früheren, rein farbigen Kreis als Haupt-Symbol.
     ctx.beginPath();
     ctx.fillStyle = color;
-    ctx.arc(x, y, currentHexSize * 0.4, 0, Math.PI * 2);
+    ctx.arc(x, y, currentHexSize * 0.42, 0, Math.PI * 2);
+    ctx.globalAlpha *= 0.35;
     ctx.fill();
+    ctx.globalAlpha = isFrozen || (unit.hasMoved && unit.hasActed) ? 0.5 : 1;
+
+    const isGuardian = unit.designId === "guardian";
+    const hullId = isGuardian ? null : owner?.shipDesigns.find((d) => d.id === unit.designId)?.hullId;
+    const artPath = isGuardian ? GUARDIAN_ART_PATH : owner && hullId ? shipArtPath(owner.raceId, hullId) : null;
+    const img = artPath ? getShipImage(artPath) : null;
+    if (img && img.complete && img.naturalWidth > 0) {
+      const scale = isGuardian ? GUARDIAN_ART_SCALE : HULL_ART_SCALE[hullId] ?? 1.2;
+      const box = currentHexSize * scale;
+      const aspect = img.naturalWidth / img.naturalHeight;
+      let dw = box;
+      let dh = box / aspect;
+      if (dh > box) {
+        dh = box;
+        dw = box * aspect;
+      }
+      ctx.drawImage(img, x - dw / 2, y - dh / 2, dw, dh);
+    } else {
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.arc(x, y, currentHexSize * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.globalAlpha = 1;
 
     // Stasisfeld (ROADMAP v0.19): eingefrorene Einheiten können weder
