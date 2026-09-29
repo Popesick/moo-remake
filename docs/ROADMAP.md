@@ -779,6 +779,71 @@ spielbar von der Kolonisierung bis zum Sieg.
   Verschrotten aktualisiert das Dropdown ebenso sofort; 150-Runden-
   Regression ohne Fehler.
 
+- **v0.24 – Imperiumskontakt & Rundenereignis-Panel**
+  Nutzer-Feedback: Diplomatie mit einem fremden Imperium sollte erst nach
+  tatsächlichem Sichtkontakt möglich sein, und der Spieler sollte zu
+  Rundenbeginn eine gesammelte Übersicht der wichtigen Vorkommnisse
+  bekommen statt sie einzeln aus der Karte herauslesen zu müssen.
+
+  **Imperiumskontakt** (`js/exploration.js` `updateEmpireDiscovery`): ein
+  Imperium gilt als entdeckt, sobald der Spieler eines seiner Schiffe oder
+  einen seiner besiedelten Planeten in einem SELBST erforschten System
+  (`exploredSystemIds`, nicht nur einem sichtbaren Nachbarsystem) gesehen
+  hat. Läuft jede Runde direkt nach `updateExploredSystems`, damit ein
+  gerade erst erforschtes System noch in derselben Runde zählt.
+  `js/ui.js` `renderDiplomacyDialog` blendet noch nicht entdeckte Imperien
+  komplett aus der Liste aus (mit erklärendem Hinweistext, falls welche
+  fehlen) – Krieg/Frieden/Handel/Spionage sind für sie schlicht nicht
+  erreichbar. *Vereinfacht:* gilt nur für den Spieler, die KI bleibt
+  allwissend und initiiert ohnehin nie selbst Diplomatie (ROADMAP v0.12).
+
+  **Rundenereignis-Panel** (neue Spalte zwischen Karte und Seitenleiste,
+  `js/turnEvents.js`): fasst zu Rundenbeginn per Vorher/Nachher-Vergleich
+  des Spielerbesitzstands sowie den während `simulateTurn` gesammelten
+  Rohdaten fünf Ereignistypen zusammen, jeweils mit eigenem Icon
+  (`js/icons.js`, im bestehenden handgezeichneten Inline-SVG-Stil statt
+  ChatGPT-Bildern – Konsistenz mit dem übrigen UI-Chrome-Icon-Set aus
+  v0.21):
+  - *Neues Imperium entdeckt*: Klick öffnet einen Dialog mit Porträt
+    ("Du entdeckst das Volk der X.") und den Optionen OK (schließt nur)
+    und "Kontakt aufnehmen" (öffnet direkt die jetzt gefilterte
+    Diplomatie).
+  - *Neues Schiff gebaut* (nur Kriegsschiffe, keine Kolonieschiffe):
+    Klick springt zum produzierenden System, damit der Flotte sofort
+    Befehle erteilt werden können.
+  - *Feind gesichtet* / *Planet besetzt* / *System verloren*: per
+    Lupen-Icon Sprung zum betroffenen System, per X schließen ohne
+    Aktion. "Feind gesichtet" gilt für eine fremde, im Krieg stehende
+    Flotte, die diese Runde in einem zuvor eigenen System angekommen ist
+    (`isAtWar`); "Planet besetzt"/"System verloren" werden aus dem
+    Besitzstands-Diff berechnet, nicht an jeder einzelnen
+    Besitzwechsel-Stelle (Invasion, Bioangriff, KI-Eroberung) einzeln
+    ausgelöst. *Vereinfacht:* da es keinen formalen Bündnis-Mechanismus
+    gibt (nur Krieg/Frieden/Handelsabkommen, siehe `js/diplomacy.js`),
+    wird "verbündetes System/Planet" aus dem Nutzer-Feedback als
+    "eigenes System/Planet" interpretiert.
+
+  Die Ereignisberechnung läuft unabhängig von offenen interaktiven
+  Kampf-Grid-Gefechten oder einer Ratssitzung erst, sobald die komplette
+  Rundenabwicklung abgeschlossen ist (Kontext wird durch
+  `turnEndContext`/`pendingCouncilVote` bis zum finalen
+  `finishTurnDisplay` durchgereicht) und wird dort UNABHÄNGIG von der
+  bestehenden Prioritätenkette (Kampfbericht > galaktisches Ereignis >
+  Durchbruch > Ankunft) immer angezeigt. Ereignisse sind bewusst nicht
+  Teil des Speicherstands – reine Anzeige des letzten Rundenwechsels.
+
+  Verifiziert: Entdeckung per direkter Modul-Aufrufe (Diplomatie vorher
+  gesperrt, danach freigeschaltet, korrektes neu-entdecktes Imperium);
+  Besitzstands-Diff-Logik für Feind gesichtet/Planet besetzt/System
+  verloren inkl. Mehrfachereignis im selben System in derselben Runde;
+  vollständiger Durchlauf über echte Klicks in der Live-UI (Diplomatie
+  zeigt Hinweistext bei komplett unentdeckter Galaxie, Entdeckungsdialog
+  mit korrektem Porträt/Name, "Kontakt aufnehmen" öffnet die jetzt
+  gefilterte Diplomatie mit dem neuen Imperium gelistet, Lupen-/X-Buttons
+  im Ereignis-Panel lösen die richtigen Aktionen aus und respektieren
+  Event-Bubbling korrekt); 60-Runden-Regression über die echte
+  `simulateTurn`/`computeTurnEvents`-Kette ohne Fehler.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-

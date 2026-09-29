@@ -27,6 +27,11 @@
     <main id="main">
       <canvas id="galaxy-canvas"></canvas>
 
+      <aside id="event-panel" hidden>
+        <h3>Ereignisse</h3>
+        <ul id="event-list"></ul>
+      </aside>
+
       <aside id="side-panel">
         <div id="side-panel-empty">Klicke auf ein Sternensystem, um Details zu sehen.</div>
         <div id="system-details" hidden>
@@ -227,6 +232,18 @@
         <div id="battle-report"></div>
         <div class="dialog-actions">
           <button id="battle-close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="empire-discovered-dialog" class="dialog-overlay" hidden>
+      <div class="dialog">
+        <h2>Neues Imperium entdeckt</h2>
+        <div id="empire-discovered-portrait"></div>
+        <p id="empire-discovered-text"></p>
+        <div class="dialog-actions">
+          <button id="empire-discovered-ok">OK</button>
+          <button id="empire-discovered-contact" class="btn-cta">Kontakt aufnehmen</button>
         </div>
       </div>
     </div>

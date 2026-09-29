@@ -18,6 +18,13 @@ const PATHS = {
   "music-off": `<path d="M9 18V5l10-2v13"/><circle cx="7" cy="18" r="2.4"/><circle cx="17" cy="16" r="2.4"/><path d="M3 3l18 18"/>`,
   "sfx-on": `<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 7a7 7 0 0 1 0 10"/>`,
   "sfx-off": `<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9l5 5M21 9l-5 5"/>`,
+  "empire-discovered": `<circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4a12 12 0 0 1 0 16M12 4a12 12 0 0 0 0 16"/>`,
+  "ship-built": `<path d="M12 3l4 14h-3l-1 3-1-3H8z"/><path d="M12 8v6" stroke-dasharray="1.6 1.6"/>`,
+  "enemy-sighted": `<path d="M12 3l8 4v5c0 5-3.4 7.6-8 9-4.6-1.4-8-4-8-9V7z"/><path d="M9 10l6 6M15 10l-6 6"/>`,
+  "planet-lost": `<circle cx="12" cy="12" r="7"/><ellipse cx="12" cy="12" rx="10" ry="3.2" transform="rotate(-20 12 12)"/><path d="M4 4l16 16" stroke="var(--danger,#e05555)"/>`,
+  "system-lost": `<path d="M12 3l2.2 6.8H21l-5.6 4.2L17.6 21 12 16.9 6.4 21l2.2-6.9L3 9.8h6.8z"/><path d="M4 4l16 16" stroke="var(--danger,#e05555)"/>`,
+  jump: `<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/>`,
+  dismiss: `<path d="M5 5l14 14M19 5L5 19"/>`,
 };
 
 // Liefert Inline-SVG-Markup für `name` (siehe PATHS oben). size in px,

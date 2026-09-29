@@ -26,7 +26,7 @@ import { DEFAULT_TRAVEL_RANGE_PARSEC, UNLIMITED_TRAVEL_RANGE_PARSEC } from "./da
 import { isOrionGuarded } from "./orion.js";
 import { killCountFor, ELIMINATION_KILL_BONUS, GUARDIAN_KILL_BONUS } from "./victory.js";
 import { GALAXY_SIZES } from "./galaxyGen.js";
-import { isSystemExplored, isFleetEligibleForAutoExplore } from "./exploration.js";
+import { isSystemExplored, isFleetEligibleForAutoExplore, hasDiscoveredEmpire } from "./exploration.js";
 
 const SLIDER_LABELS = { ship: "Schiff", def: "Verteidigung", ind: "Industrie", eco: "Ökologie", tech: "Forschung" };
 
@@ -805,8 +805,19 @@ export function renderDiplomacyDialog(galaxy, callbacks) {
   const container = document.getElementById("diplomacy-list");
   container.innerHTML = "";
 
+  const undiscovered = galaxy.empires.filter(
+    (e) => e.id !== player.id && !e.eliminated && !hasDiscoveredEmpire(player, e.id)
+  );
+  if (undiscovered.length > 0) {
+    const hint = document.createElement("p");
+    hint.className = "dialog-hint";
+    hint.textContent = "Weitere Imperien wurden noch nicht entdeckt. Diplomatie ist erst nach Sichtkontakt mit einem ihrer Schiffe oder Systeme möglich.";
+    container.appendChild(hint);
+  }
+
   for (const empire of galaxy.empires) {
     if (empire.id === player.id || empire.eliminated) continue;
+    if (!hasDiscoveredEmpire(player, empire.id)) continue;
     const relation = callbacks.getRelation(empire.id);
     const race = getRace(empire.raceId);
 
@@ -1020,4 +1031,85 @@ export function openCouncilDialog() {
 
 export function closeCouncilDialog() {
   document.getElementById("council-dialog").hidden = true;
+}
+
+// Rundenereignis-Panel (ROADMAP v0.24, Nutzer-Feedback): listet die von
+// js/turnEvents.js berechneten Ereignisse der letzten Runde. Je nach Typ
+// öffnet ein Klick auf den Eintrag selbst eine Aktion (neues Imperium →
+// Entdeckungsdialog, neues Schiff → Flotte/System auswählen) oder, bei den
+// drei "Sprung"-Ereignissen (Feind gesichtet/Planet besetzt/System
+// verloren), zeigt eine Lupe zum Springen zusätzlich zum X zum Schließen.
+export function renderEventPanel(events, callbacks) {
+  const panel = document.getElementById("event-panel");
+  const list = document.getElementById("event-list");
+  list.innerHTML = "";
+  if (!events || events.length === 0) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const JUMP_TYPES = new Set(["enemy-sighted", "planet-lost", "system-lost"]);
+
+  for (const event of events) {
+    const li = document.createElement("li");
+    li.className = `event-item event-${event.type}`;
+
+    const icon = document.createElement("span");
+    icon.className = "event-item-icon";
+    icon.innerHTML = iconSvg(event.icon, 20);
+    li.appendChild(icon);
+
+    const text = document.createElement("span");
+    text.className = "event-item-text";
+    text.textContent = event.text;
+    li.appendChild(text);
+
+    if (event.type === "empire-discovered") {
+      li.addEventListener("click", () => callbacks.onNewEmpire(event));
+    } else if (event.type === "ship-built") {
+      li.addEventListener("click", () => callbacks.onShipBuilt(event));
+    } else if (JUMP_TYPES.has(event.type)) {
+      const jumpBtn = document.createElement("button");
+      jumpBtn.className = "event-item-dismiss";
+      jumpBtn.title = "Zum System springen";
+      jumpBtn.innerHTML = iconSvg("jump", 15);
+      jumpBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        callbacks.onJumpToSystem(event.systemId);
+      });
+      li.appendChild(jumpBtn);
+    }
+
+    const dismissBtn = document.createElement("button");
+    dismissBtn.className = "event-item-dismiss";
+    dismissBtn.title = "Schließen";
+    dismissBtn.innerHTML = iconSvg("dismiss", 13);
+    dismissBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      callbacks.onDismiss(event.id);
+    });
+    li.appendChild(dismissBtn);
+
+    list.appendChild(li);
+  }
+}
+
+// "Neues Imperium entdeckt"-Dialog (ROADMAP v0.24): zeigt Porträt + Name des
+// entdeckten Volks; "Kontakt aufnehmen" wechselt zur Diplomatie, "OK"
+// schließt nur den Dialog (Wiring in js/main.js).
+export function renderEmpireDiscoveredDialog(empire) {
+  const race = getRace(empire?.raceId);
+  const name = race?.name ?? empire?.name ?? "?";
+  const portrait = document.getElementById("empire-discovered-portrait");
+  portrait.innerHTML = empire ? `<img src="${racePortraitPath(empire.raceId)}" alt="${name}" />` : "";
+  document.getElementById("empire-discovered-text").textContent = `Du entdeckst das Volk der ${name}.`;
+}
+
+export function openEmpireDiscoveredDialog() {
+  document.getElementById("empire-discovered-dialog").hidden = false;
+}
+
+export function closeEmpireDiscoveredDialog() {
+  document.getElementById("empire-discovered-dialog").hidden = true;
 }

@@ -7,6 +7,11 @@ export const gameState = {
   galaxy: null,
   selectedSystemId: null,
   camera: { x: 0, y: 0, zoom: 1 },
+  // Rundenereignisse (ROADMAP v0.24) sind bewusst NICHT Teil des Speicher-
+  // stands (siehe saveGame unten) – sie sind reine Anzeige des letzten
+  // Rundenwechsels und werden beim Laden/Neustart wieder leer.
+  turnEvents: [],
+  pendingDiscoveredEmpireId: null,
 };
 
 export function saveGame() {

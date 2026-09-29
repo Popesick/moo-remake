@@ -24,7 +24,7 @@ import { checkCouncilActivation, checkCouncilVoteDue } from "./council.js";
 import { checkGameEnd } from "./victory.js";
 import { resolveOrionGuardianCombat, isOrionGuarded } from "./orion.js";
 import { maybeTriggerGalacticEvent } from "./events.js";
-import { updateExploredSystems, runAutoExplore } from "./exploration.js";
+import { updateExploredSystems, runAutoExplore, updateEmpireDiscovery } from "./exploration.js";
 import { ESPIONAGE_GENERATION_RATE, DEFAULT_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import {
   BASE_BC_PER_POP,
@@ -158,6 +158,10 @@ export function simulateTurn(galaxy) {
   const empireById = new Map(galaxy.empires.map((e) => [e.id, e]));
   const empireDeltas = new Map(galaxy.empires.map((e) => [e.id, { techBC: 0, defBC: 0, totalBC: 0 }]));
   const turnForAi = galaxy.turn ?? 1;
+  // Für die Rundenereignis-Zusammenfassung (ROADMAP v0.24, js/turnEvents.js)
+  // – nur des Spielers eigene, echte Kriegsschiff-Designs (keine
+  // Kolonieschiffe, siehe unten) werden als "Neues Schiff gebaut" gemeldet.
+  const shipsBuilt = [];
 
   for (const empire of galaxy.empires) {
     if (!empire.isPlayer) runAiTurn(galaxy, empire, galaxy.seed, turnForAi);
@@ -207,7 +211,15 @@ export function simulateTurn(galaxy) {
           const fund = prod.bc.ship + (planet.shipCarry ?? 0);
           const built = stats.costBC > 0 ? Math.floor(fund / stats.costBC) : 0;
           planet.shipCarry = fund - built * stats.costBC;
-          if (built > 0) addShipsToSystem(galaxy, planet.colonizedBy, system.id, design.id, built);
+          if (built > 0) {
+            addShipsToSystem(galaxy, planet.colonizedBy, system.id, design.id, built);
+            if (empire?.isPlayer) {
+              const fleet = galaxy.fleets.find(
+                (f) => f.ownerEmpireId === planet.colonizedBy && f.systemId === system.id && !f.destinationSystemId
+              );
+              shipsBuilt.push({ systemId: system.id, designId: design.id, designName: design.name, count: built, fleetId: fleet?.id ?? null });
+            }
+          }
         } else {
           // Ohne explizites Kriegsschiff-Ziel baut der Planet Kolonieschiffe
           // (ROADMAP v0.14): echte Flotteneinheiten am eigenen System statt
@@ -260,6 +272,10 @@ export function simulateTurn(galaxy) {
   // als erforscht markieren, bevor Kampfberichte/Events etc. darauf Bezug
   // nehmen.
   updateExploredSystems(galaxy);
+  // Imperiumskontakt (ROADMAP v0.24): nach der Erforschungsaktualisierung,
+  // damit ein gerade erst erforschtes System noch in derselben Runde zu
+  // einer Entdeckung führen kann.
+  const newDiscoveries = updateEmpireDiscovery(galaxy);
   // Kolonisieren-auf-Zuruf (ROADMAP v0.22): ein per orderColonization
   // losgeschicktes Kolonieschiff kolonisiert bei Ankunft automatisch seinen
   // zugewiesenen Planeten, ohne dass der Spieler erneut klicken muss.
@@ -311,6 +327,8 @@ export function simulateTurn(galaxy) {
     gameEnd,
     councilVote,
     galacticEvent: galacticEvent && !galacticEvent.isGuardianBattle ? galacticEvent : null,
+    shipsBuilt,
+    newDiscoveries,
   };
 }
 

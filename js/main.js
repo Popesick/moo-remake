@@ -28,6 +28,7 @@ import { aiAcceptsTradeOffer } from "./ai.js";
 import { resolveCouncilVote } from "./council.js";
 import { computeScore } from "./victory.js";
 import { recordHallOfFameEntry, loadHallOfFame } from "./hallOfFame.js";
+import { snapshotPlayerState, computeTurnEvents } from "./turnEvents.js";
 import {
   renderSystemPanel,
   updateTopbarInfo,
@@ -61,6 +62,10 @@ import {
   openSettingsDialog,
   closeSettingsDialog,
   renderSettingsDialog,
+  renderEventPanel,
+  renderEmpireDiscoveredDialog,
+  openEmpireDiscoveredDialog,
+  closeEmpireDiscoveredDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -228,8 +233,22 @@ function selectSystem(system) {
   requestRender();
 }
 
-// Springt zum Heimatsystem des Spielers: zentriert die Kamera darauf und
-// wählt es zugleich in der Seitenleiste aus (behebt "Heimatsystem nicht
+// Zentriert die Kamera auf ein System und wählt es zugleich in der
+// Seitenleiste aus – Basis für "Heimatsystem" sowie die Sprung-Aktionen des
+// Rundenereignis-Panels (ROADMAP v0.24: Feind gesichtet/Planet besetzt/
+// System verloren).
+function jumpToSystem(systemId) {
+  const system = findSystem(gameState.galaxy, systemId);
+  if (!system) {
+    flashTopbar("System nicht gefunden.");
+    return;
+  }
+  gameState.camera.zoom = Math.max(gameState.camera.zoom, 0.9);
+  centerCameraOnPoint(canvas, gameState.camera, system.x, system.y);
+  selectSystem(system);
+}
+
+// Springt zum Heimatsystem des Spielers (behebt "Heimatsystem nicht
 // auffindbar" nach dem Verschieben/Zoomen der Karte).
 function goToHomeSystem() {
   if (!gameState.galaxy) return;
@@ -239,9 +258,7 @@ function goToHomeSystem() {
     flashTopbar("Heimatsystem nicht gefunden.");
     return;
   }
-  gameState.camera.zoom = Math.max(gameState.camera.zoom, 0.9);
-  centerCameraOnPoint(canvas, gameState.camera, homeSystem.x, homeSystem.y);
-  selectSystem(homeSystem);
+  jumpToSystem(homeSystem.id);
 }
 
 function startNewGalaxy({ sizeId, empireCount, difficultyId, seed, raceId }) {
@@ -370,6 +387,34 @@ const diplomacyCallbacks = {
   },
 };
 
+// Rundenereignis-Panel (ROADMAP v0.24, Nutzer-Feedback): entfernt ein
+// einzelnes Ereignis aus der Liste (nach Ansehen/Springen oder per X) und
+// rendert das Panel neu.
+function dismissEvent(eventId) {
+  gameState.turnEvents = (gameState.turnEvents ?? []).filter((e) => e.id !== eventId);
+  renderEventPanel(gameState.turnEvents, eventCallbacks);
+}
+
+const eventCallbacks = {
+  onNewEmpire(event) {
+    const empire = getEmpire(event.empireId);
+    gameState.pendingDiscoveredEmpireId = event.empireId;
+    renderEmpireDiscoveredDialog(empire);
+    openEmpireDiscoveredDialog();
+    dismissEvent(event.id);
+  },
+  onShipBuilt(event) {
+    jumpToSystem(event.systemId);
+    dismissEvent(event.id);
+  },
+  onJumpToSystem(systemId) {
+    jumpToSystem(systemId);
+  },
+  onDismiss(eventId) {
+    dismissEvent(eventId);
+  },
+};
+
 // Interaktives Kampf-Grid (ROADMAP v0.16): galaxy.pendingBattles sammelt die
 // Gefechte, die simulateTurn (js/economy.js) wegen der aktivierten
 // Einstellung zurückgestellt hat. Die Runde gilt erst als abgeschlossen
@@ -386,7 +431,18 @@ function openNextPendingBattle() {
     gameState.turnEndBattleReports = null;
     gameState.activeBattle = null;
     closeHexCombatDialog();
-    if (ctx) finishTurnDisplay(ctx.playerEmpire, reports, ctx.breakthroughsByEmpire, ctx.arrivals, ctx.galacticEvent);
+    if (ctx) {
+      finishTurnDisplay(
+        ctx.playerEmpire,
+        reports,
+        ctx.breakthroughsByEmpire,
+        ctx.arrivals,
+        ctx.galacticEvent,
+        ctx.before,
+        ctx.shipsBuilt,
+        ctx.newDiscoveries
+      );
+    }
     return;
   }
 
@@ -473,17 +529,39 @@ const hexCombatCallbacks = {
 // Fasst den Rundenabschluss zusammen, sobald keine offenen Kampf-Grid-Gefechte
 // mehr anstehen: entweder sofort (klassische Auto-Auflösung, keine
 // Interaktion nötig) oder nach Abarbeiten der Warteschlange oben.
-function proceedToBattlesOrFinish(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent) {
+function proceedToBattlesOrFinish(
+  playerEmpire,
+  battleReports,
+  breakthroughsByEmpire,
+  arrivals,
+  galacticEvent,
+  before,
+  shipsBuilt,
+  newDiscoveries
+) {
   if (gameState.galaxy.pendingBattles?.length > 0) {
-    gameState.turnEndContext = { playerEmpire, breakthroughsByEmpire, arrivals, galacticEvent };
+    gameState.turnEndContext = { playerEmpire, breakthroughsByEmpire, arrivals, galacticEvent, before, shipsBuilt, newDiscoveries };
     gameState.turnEndBattleReports = [...battleReports];
     openNextPendingBattle();
     return;
   }
-  finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent);
+  finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent, before, shipsBuilt, newDiscoveries);
 }
 
-function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent) {
+function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent, before, shipsBuilt, newDiscoveries) {
+  // Rundenereignisse (ROADMAP v0.24) werden IMMER berechnet und angezeigt,
+  // bevor die bisherige Prioritätenkette (Kampfbericht > galaktisches
+  // Ereignis > Durchbruch > Ankunft) greift – das Panel ist unabhängig von
+  // etwaigen Dialogen sichtbar.
+  gameState.turnEvents = before
+    ? computeTurnEvents(gameState.galaxy, playerEmpire, before, {
+        arrivals,
+        shipsBuilt: shipsBuilt ?? [],
+        newDiscoveries: newDiscoveries ?? [],
+      })
+    : [];
+  renderEventPanel(gameState.turnEvents, eventCallbacks);
+
   const playerBattles = battleReports.filter((r) => r.empireIds.includes(playerEmpire.id));
   if (playerBattles.length > 0) {
     renderBattleReports(playerBattles, gameState.galaxy);
@@ -543,7 +621,16 @@ const councilCallbacks = {
       flashTopbar("Galaktischer Rat: keine Mehrheit erreicht.");
     }
 
-    proceedToBattlesOrFinish(playerEmpire, pending.battleReports, pending.breakthroughsByEmpire, pending.arrivals, pending.galacticEvent);
+    proceedToBattlesOrFinish(
+      playerEmpire,
+      pending.battleReports,
+      pending.breakthroughsByEmpire,
+      pending.arrivals,
+      pending.galacticEvent,
+      pending.before,
+      pending.shipsBuilt,
+      pending.newDiscoveries
+    );
   },
 };
 
@@ -557,14 +644,24 @@ function endTurn() {
   // simulieren.
   if (gameState.galaxy.pendingBattles?.length > 0) {
     if (!gameState.turnEndContext) {
-      gameState.turnEndContext = { playerEmpire: getPlayerEmpire(), breakthroughsByEmpire: new Map(), arrivals: [], galacticEvent: null };
+      gameState.turnEndContext = {
+        playerEmpire: getPlayerEmpire(),
+        breakthroughsByEmpire: new Map(),
+        arrivals: [],
+        galacticEvent: null,
+        before: null,
+        shipsBuilt: [],
+        newDiscoveries: [],
+      };
       gameState.turnEndBattleReports = [];
     }
     openNextPendingBattle();
     return;
   }
 
-  const { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote, galacticEvent } = simulateTurn(gameState.galaxy);
+  const before = snapshotPlayerState(gameState.galaxy, getPlayerEmpire());
+  const { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote, galacticEvent, shipsBuilt, newDiscoveries } =
+    simulateTurn(gameState.galaxy);
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
   requestRender();
@@ -580,13 +677,13 @@ function endTurn() {
   }
 
   if (councilVote) {
-    pendingCouncilVote = { vote: councilVote, battleReports, breakthroughsByEmpire, arrivals, galacticEvent };
+    pendingCouncilVote = { vote: councilVote, battleReports, breakthroughsByEmpire, arrivals, galacticEvent, before, shipsBuilt, newDiscoveries };
     renderCouncilDialog(gameState.galaxy, councilVote, councilCallbacks);
     openCouncilDialog();
     return;
   }
 
-  proceedToBattlesOrFinish(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent);
+  proceedToBattlesOrFinish(playerEmpire, battleReports, breakthroughsByEmpire, arrivals, galacticEvent, before, shipsBuilt, newDiscoveries);
 }
 
 function setupCanvasInteractions() {
@@ -714,6 +811,22 @@ function setupDialogAndButtons() {
 
   document.getElementById("btn-home").addEventListener("click", goToHomeSystem);
 
+  // "Neues Imperium entdeckt"-Dialog (ROADMAP v0.24): OK schließt nur,
+  // "Kontakt aufnehmen" wechselt direkt zur Diplomatie (jetzt mit dem neu
+  // entdeckten Imperium in der Liste, siehe hasDiscoveredEmpire-Filter in
+  // js/ui.js renderDiplomacyDialog).
+  document.getElementById("empire-discovered-ok").addEventListener("click", () => {
+    closeEmpireDiscoveredDialog();
+    gameState.pendingDiscoveredEmpireId = null;
+  });
+  document.getElementById("empire-discovered-contact").addEventListener("click", () => {
+    closeEmpireDiscoveredDialog();
+    gameState.pendingDiscoveredEmpireId = null;
+    if (!gameState.galaxy) return;
+    renderDiplomacyDialog(gameState.galaxy, diplomacyCallbacks);
+    openDiplomacyDialog();
+  });
+
   document.getElementById("btn-halloffame").addEventListener("click", () => {
     renderHallOfFame(loadHallOfFame());
     openHallOfFameDialog();
@@ -831,7 +944,15 @@ function init() {
     // (ROADMAP v0.16) sofort wieder anbieten, statt die Runde stillschweigend
     // weiterlaufen zu lassen.
     if (gameState.galaxy.pendingBattles?.length > 0) {
-      gameState.turnEndContext = { playerEmpire: getPlayerEmpire(), breakthroughsByEmpire: new Map(), arrivals: [], galacticEvent: null };
+      gameState.turnEndContext = {
+        playerEmpire: getPlayerEmpire(),
+        breakthroughsByEmpire: new Map(),
+        arrivals: [],
+        galacticEvent: null,
+        before: null,
+        shipsBuilt: [],
+        newDiscoveries: [],
+      };
       gameState.turnEndBattleReports = [];
       openNextPendingBattle();
     }

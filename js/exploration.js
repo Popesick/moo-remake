@@ -66,6 +66,52 @@ export function isSystemExplored(galaxy, empireId, systemId) {
   return empire?.exploredSystemIds?.includes(systemId) ?? false;
 }
 
+// Imperiumskontakt (ROADMAP v0.24, Nutzer-Feedback): Diplomatie mit einem
+// anderen Imperium ist erst möglich, sobald man in einem SELBST erforschten
+// System (nicht nur einem bloß sichtbaren Nachbarsystem, siehe
+// getExploredAndVisible) entweder eines seiner Schiffe oder einen von ihm
+// besiedelten Planeten gesehen hat. *Vereinfacht:* nur der Spieler muss
+// Imperien entdecken – die KI ist ohnehin allwissend (siehe
+// "MoO KI Verhalten.docx", ROADMAP v0.12) und initiiert selbst keine
+// Diplomatie, siehe js/ai.js. Läuft nach updateExploredSystems, damit ein
+// gerade erst erforschtes System noch in derselben Runde zählt. Liefert die
+// in dieser Runde neu entdeckten Imperien (für die Ereignis-Anzeige,
+// js/turnEvents.js).
+export function updateEmpireDiscovery(galaxy) {
+  const newlyDiscovered = [];
+  for (const empire of galaxy.empires) {
+    if (!empire.isPlayer) continue;
+    if (!empire.discoveredEmpireIds) empire.discoveredEmpireIds = [];
+    const discovered = new Set(empire.discoveredEmpireIds);
+    const explored = new Set(empire.exploredSystemIds ?? []);
+
+    for (const system of galaxy.systems) {
+      if (!explored.has(system.id)) continue;
+      for (const planet of system.planets) {
+        const ownerId = planet.colonizedBy;
+        if (ownerId === null || ownerId === undefined || ownerId === empire.id) continue;
+        if (discovered.has(ownerId)) continue;
+        discovered.add(ownerId);
+        newlyDiscovered.push({ empireId: empire.id, discoveredEmpireId: ownerId });
+      }
+    }
+    for (const fleet of galaxy.fleets) {
+      if (fleet.ownerEmpireId === empire.id) continue;
+      if (!explored.has(fleet.systemId)) continue;
+      if (discovered.has(fleet.ownerEmpireId)) continue;
+      discovered.add(fleet.ownerEmpireId);
+      newlyDiscovered.push({ empireId: empire.id, discoveredEmpireId: fleet.ownerEmpireId });
+    }
+
+    empire.discoveredEmpireIds = [...discovered];
+  }
+  return newlyDiscovered;
+}
+
+export function hasDiscoveredEmpire(empire, otherEmpireId) {
+  return empire?.discoveredEmpireIds?.includes(otherEmpireId) ?? false;
+}
+
 // Nur Flotten, deren Schiffe ausschließlich auf einem Small-Rumpf-Design
 // basieren, dürfen automatisch erkunden (Nutzer-Feedback: "für kleine
 // Schiffe") – Kolonieschiffe (kein Design, siehe COLONY_SHIP_DESIGN_ID) und
