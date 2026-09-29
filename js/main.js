@@ -277,6 +277,12 @@ const shipDesignCallbacks = {
     const result = addShipDesign(player, design);
     if (result.ok) {
       updateTopbarInfo(gameState.galaxy);
+      // Das Produktionsziel-Dropdown der Seitenleiste (js/ui.js
+      // buildOwnedPlanetCard) listet player.shipDesigns – ohne diesen
+      // Refresh war ein frisch erstelltes Design erst nach dem nächsten,
+      // aus anderem Grund ausgelösten Seitenleisten-Rendering wählbar (z.B.
+      // erst in der Folgerunde), obwohl es sofort einsatzbereit ist.
+      refreshSidePanel();
       saveGame();
     }
     return result;
@@ -285,6 +291,7 @@ const shipDesignCallbacks = {
     const player = getPlayerEmpire();
     scrapShipDesign(player, designId);
     renderShipDesignDialog(gameState.galaxy, shipDesignCallbacks);
+    refreshSidePanel();
     saveGame();
   },
   onError(reason) {

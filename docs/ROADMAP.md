@@ -758,6 +758,27 @@ spielbar von der Kolonisierung bis zum Sieg.
   Flottenposition, nicht die tatsächliche verbleibende Reisezeit oder
   laufende Aufträge anderer Flotten.
 
+- **v0.23 – Bugfix: neues Schiffsdesign erst nächste Runde wählbar**
+  Nutzer-Feedback: ein frisch erstelltes Schiffsdesign ließ sich im
+  Produktionsziel-Dropdown eines Planeten (`js/ui.js`
+  `buildOwnedPlanetCard`) erst nach der nächsten, aus anderem Grund
+  ausgelösten Seitenleisten-Aktualisierung auswählen – meist faktisch
+  erst nach "Runde beenden", obwohl das Design bereits sofort einsatzbereit
+  war. Ursache: `js/main.js` `shipDesignCallbacks.onCreateDesign` (und
+  `onScrap`) aktualisierten nach `addShipDesign`/`scrapShipDesign` zwar den
+  Schiffsdesign-Dialog selbst und die Kopfleiste, riefen aber kein
+  `refreshSidePanel()` auf – das Dropdown ist eine eigene DOM-Struktur, die
+  ohne diesen Aufruf die veraltete `player.shipDesigns`-Liste stehen ließ.
+  Beide Callbacks rufen `refreshSidePanel()` jetzt zusätzlich auf.
+
+  Verifiziert über echte Klicks in der Live-UI: Design im
+  Schiffsdesign-Dialog erstellt, Dialog geschlossen, Dropdown zeigt das
+  neue Design sofort (vorher fehlte es bis zum nächsten Refresh);
+  Auswahl setzt `planet.productionTarget` korrekt; nachfolgende Runde
+  spart tatsächlich BC für das neue Design an statt für Kolonieschiffe;
+  Verschrotten aktualisiert das Dropdown ebenso sofort; 150-Runden-
+  Regression ohne Fehler.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-
