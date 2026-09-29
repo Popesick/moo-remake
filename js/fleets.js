@@ -33,6 +33,26 @@ export function purgeGhostDesignStacks(galaxy) {
   galaxy.fleets = galaxy.fleets.filter((f) => f.stacks.length > 0);
 }
 
+// Bewahrt Kolonieschiffe (kein reguläres Schiffsdesign, siehe
+// js/data/economy.js COLONY_SHIP_DESIGN_ID) vor der Vernichtung, wenn eine
+// an einem Kampf beteiligte Flotte dort verliert: js/combat.js buildUnits
+// nimmt sie nie am Gefecht teil, sie sollten dessen Ausgang daher auch
+// nicht miterleiden. Gemeinsam genutzt von js/economy.js applyBattleResult
+// (reguläre Zwei-Imperien-Gefechte), js/orion.js finalizeGuardianCombat und
+// js/events.js finalizeSpaceMonsterCombat – Letztere bauten die Flotten am
+// System bislang blank aus den Kampf-Überlebenden neu auf und rissen dabei
+// auch dort mitgeführte Kolonieschiffe mit in den Untergang.
+export function extractNonCombatStacks(galaxy, systemId, empireIds) {
+  const preserved = [];
+  for (const fleet of galaxy.fleets) {
+    if (fleet.systemId !== systemId || fleet.destinationSystemId || !empireIds.has(fleet.ownerEmpireId)) continue;
+    const empire = galaxy.empires.find((e) => e.id === fleet.ownerEmpireId);
+    const nonCombatStacks = fleet.stacks.filter((s) => !empire?.shipDesigns.some((d) => d.id === s.designId));
+    if (nonCombatStacks.length > 0) preserved.push({ ...fleet, stacks: nonCombatStacks });
+  }
+  return preserved;
+}
+
 // Neue Schiffe entstehen als eigener Stack in einer (neuen oder bestehenden,
 // stationären) Flotte am Bauplaneten-System.
 export function addShipsToSystem(galaxy, empireId, systemId, designId, count) {

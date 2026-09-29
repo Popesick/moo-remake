@@ -3,6 +3,7 @@
 // aus js/economy.js simulateTurn aufgerufen.
 import { makeRng, hashSeed } from "./rng.js";
 import { resolveMonsterBattle, MONSTER_EMPIRE_ID } from "./combat.js";
+import { extractNonCombatStacks } from "./fleets.js";
 import {
   EVENT_CHANCE_PER_TURN,
   EVENT_MIN_TURN,
@@ -14,6 +15,47 @@ import {
   SPACE_MONSTER_BOMBARD_POPULATION_LOSS_PCT,
   EVENT_WEIGHTS,
 } from "./data/galacticEvents.js";
+
+// Gemeinsame Nachbearbeitung eines abgeschlossenen Weltraum-Monster-
+// Gefechts, egal ob automatisch aufgelöst (resolveSpaceMonster) oder über
+// das interaktive Kampf-Grid entschieden (ROADMAP v0.30, siehe
+// applyInteractiveSpaceMonsterResult unten). Baut die beteiligten Flotten
+// aus den Überlebenden neu auf – anders als beim Guardian gibt es hier
+// keine Sieg-Belohnung und keinen dauerhaften Bewacher-Status, das
+// Ereignis ist mit dieser einen Runde abgeschlossen.
+function finalizeSpaceMonsterCombat(galaxy, systemId, result) {
+  const empireIds = result.empireIds.filter((id) => id !== MONSTER_EMPIRE_ID);
+
+  // Kolonieschiffe, die zufällig mit einer kämpfenden Flotte am angegriffenen
+  // System standen, dürfen den Kampfausgang nicht mit erleiden (Bugfix
+  // ROADMAP v0.30, dieselbe Problematik wie js/economy.js applyBattleResult,
+  // siehe js/fleets.js extractNonCombatStacks).
+  const survivingNonCombatFleets = extractNonCombatStacks(galaxy, systemId, new Set(empireIds));
+  galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === systemId && !f.destinationSystemId));
+  galaxy.fleets.push(...survivingNonCombatFleets);
+  for (const empireId of empireIds) {
+    const stacks = result.survivorsByEmpire.get(empireId) ?? [];
+    if (stacks.length === 0) continue;
+    galaxy.fleets.push({
+      id: `fleet-${galaxy.nextFleetId++}`,
+      ownerEmpireId: empireId,
+      systemId,
+      destinationSystemId: null,
+      stacks,
+    });
+  }
+  return { ...result, systemId, empireIds, isGuardianBattle: true, monsterName: SPACE_MONSTER_STATS.name, type: "spaceMonster" };
+}
+
+// Wird von js/main.js nach einem interaktiv im Kampf-Grid entschiedenen
+// Weltraum-Monster-Gefecht aufgerufen (siehe js/hexcombat.js createBattle
+// galaxy.pendingSpaceMonster) – wendet dieselbe Nachbearbeitung wie die
+// Auto-Auflösung oben an, nur gespeist aus finalizeBattleResult(battle)
+// statt resolveMonsterBattle.
+export function applyInteractiveSpaceMonsterResult(galaxy, systemId, battleResult) {
+  galaxy.pendingSpaceMonster = null;
+  return finalizeSpaceMonsterCombat(galaxy, systemId, battleResult);
+}
 
 function colonizedPlanetEntries(galaxy) {
   return galaxy.systems
@@ -66,6 +108,16 @@ function resolveSupernova(galaxy, rng) {
 // stationierte Flotte im Kampf an (siehe js/combat.js resolveMonsterBattle,
 // geteilt mit dem Guardian of Orion), oder bombardiert bei fehlender
 // Verteidigung den Planeten direkt.
+//
+// Interaktives Kampf-Grid (ROADMAP v0.30, "Polish-Kandidat" aus v0.29):
+// verteidigt der Spieler ALLEIN (kein weiteres Imperium gleichzeitig
+// anwesend – das Kampf-Grid unterstützt nur Zwei-Parteien-Gefechte) und
+// hat interaktive Kämpfe aktiviert, wird das Gefecht NICHT hier sofort
+// aufgelöst, sondern als "deferred" zurückgemeldet – js/economy.js
+// simulateTurn stellt es dann wie ein reguläres Zwei-Imperien-Gefecht über
+// galaxy.pendingBattles zurück (siehe galaxy.pendingSpaceMonster, das
+// js/hexcombat.js createBattle als Marker für "hier wartet ein
+// Weltraum-Monster" abfragt).
 function resolveSpaceMonster(galaxy, rng) {
   const targets = colonizedPlanetEntries(galaxy);
   if (targets.length === 0) return null;
@@ -73,24 +125,15 @@ function resolveSpaceMonster(galaxy, rng) {
   const defendingFleets = galaxy.fleets.filter((f) => f.systemId === system.id && !f.destinationSystemId);
 
   if (defendingFleets.length > 0) {
-    const result = resolveMonsterBattle(defendingFleets, galaxy.empires, SPACE_MONSTER_STATS);
-    if (!result) return null;
-
-    galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === system.id && !f.destinationSystemId));
-    const empireIds = result.empireIds.filter((id) => id !== MONSTER_EMPIRE_ID);
-    for (const empireId of empireIds) {
-      const stacks = result.survivorsByEmpire.get(empireId) ?? [];
-      if (stacks.length === 0) continue;
-      galaxy.fleets.push({
-        id: `fleet-${galaxy.nextFleetId++}`,
-        ownerEmpireId: empireId,
-        systemId: system.id,
-        destinationSystemId: null,
-        stacks,
-      });
+    const defenderEmpireIds = [...new Set(defendingFleets.map((f) => f.ownerEmpireId))];
+    const player = galaxy.empires.find((e) => e.isPlayer);
+    if (player?.interactiveCombat && defenderEmpireIds.length === 1 && defenderEmpireIds[0] === player.id) {
+      return { type: "spaceMonster", deferred: true, systemId: system.id };
     }
 
-    return { ...result, systemId: system.id, empireIds, isGuardianBattle: true, monsterName: SPACE_MONSTER_STATS.name, type: "spaceMonster" };
+    const result = resolveMonsterBattle(defendingFleets, galaxy.empires, SPACE_MONSTER_STATS);
+    if (!result) return null;
+    return finalizeSpaceMonsterCombat(galaxy, system.id, result);
   }
 
   const popLoss = planet.population * SPACE_MONSTER_BOMBARD_POPULATION_LOSS_PCT;

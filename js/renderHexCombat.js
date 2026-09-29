@@ -3,6 +3,7 @@
 // js/render.js für die Galaxiekarte, nur für die taktische Hexfeld-Ansicht.
 import { GRID_COLS, GRID_ROWS, reachableTiles, attackableTargets } from "./hexcombat.js";
 import { shipArtPath, GUARDIAN_ART_PATH } from "./shipArt.js";
+import { MONSTER_EMPIRE_ID } from "./combat.js";
 
 // Schiffsgrafiken im Kampf-Grid (ROADMAP v0.29, Nutzerwunsch): Bilder
 // werden bei erstem Gebrauch geladen und gecacht; bis ein Bild fertig
@@ -196,10 +197,11 @@ export function renderHexCombat(battle, galaxy, callbacks) {
     if (unit.count <= 0) continue;
     const { x, y } = hexToPixel(unit.col, unit.row);
     const owner = galaxy.empires.find((e) => e.id === unit.empireId);
-    // Guardian of Orion (ROADMAP v0.27) ist kein Eintrag in galaxy.empires
-    // und bekommt daher eine feste, bedrohlich wirkende Signalfarbe statt
-    // des Fallback-Weiß.
-    const color = owner?.color ?? (unit.designId === "guardian" ? "#b23a3a" : "#ffffff");
+    // Nicht-imperiale Gegner (Guardian of Orion, ROADMAP v0.27; Weltraum-
+    // Monster, ROADMAP v0.30) sind kein Eintrag in galaxy.empires und
+    // bekommen daher eine feste, bedrohlich wirkende Signalfarbe statt des
+    // Fallback-Weiß.
+    const color = owner?.color ?? (unit.empireId === MONSTER_EMPIRE_ID ? "#b23a3a" : "#ffffff");
     const isSelected = unit.id === selectedUnitId;
     const isTargetable = targetIds.has(unit.id);
     const ringColor = isTargetable ? "#ff5b5b" : isSelected ? "#ffffff" : null;
@@ -235,9 +237,13 @@ export function renderHexCombat(battle, galaxy, callbacks) {
       }
       ctx.drawImage(img, x - dw / 2, y - dh / 2, dw, dh);
     } else {
+      // Weltraum-Monster (ROADMAP v0.30) hat noch keine eigene Grafik und
+      // fällt auf den Platzhalter-Kreis zurück – etwas größer als ein
+      // normales Schiff, damit die Bedrohung trotzdem sichtbar wirkt.
+      const isSpaceMonster = unit.designId === "spacemonster";
       ctx.beginPath();
       ctx.fillStyle = color;
-      ctx.arc(x, y, currentHexSize * 0.4, 0, Math.PI * 2);
+      ctx.arc(x, y, currentHexSize * (isSpaceMonster ? 0.7 : 0.4), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;

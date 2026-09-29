@@ -15,8 +15,9 @@ import {
   findNearestIdleColonyShipFleet,
   extractSingleColonyShip,
   purgeGhostDesignStacks,
+  extractNonCombatStacks,
 } from "./fleets.js";
-import { resolveSystemCombat } from "./combat.js";
+import { resolveSystemCombat, resolveMonsterBattle } from "./combat.js";
 import { DEFAULT_TRAVEL_SPEED, DEFAULT_TRAVEL_RANGE_PARSEC } from "./data/logistics.js";
 import { getRaceTraits } from "./data/raceTraits.js";
 import { runAiTurn } from "./ai.js";
@@ -24,7 +25,8 @@ import { isAtWar, tickTradeAgreements } from "./diplomacy.js";
 import { checkCouncilActivation, checkCouncilVoteDue } from "./council.js";
 import { checkGameEnd } from "./victory.js";
 import { resolveOrionGuardianCombat, isOrionGuarded } from "./orion.js";
-import { maybeTriggerGalacticEvent } from "./events.js";
+import { maybeTriggerGalacticEvent, applyInteractiveSpaceMonsterResult } from "./events.js";
+import { SPACE_MONSTER_STATS } from "./data/galacticEvents.js";
 import { updateExploredSystems, runAutoExplore, updateEmpireDiscovery } from "./exploration.js";
 import { ESPIONAGE_GENERATION_RATE, DEFAULT_ESPIONAGE_ALLOCATION_PCT } from "./data/espionage.js";
 import {
@@ -326,9 +328,16 @@ export function simulateTurn(galaxy) {
   // Galaktische Zufallsereignisse (ROADMAP v0.10): Kampf-förmige Ereignisse
   // (Weltraum-Monster mit Verteidigern) laufen über dieselbe
   // Battle-Report-Anzeige, reine Schadensereignisse (Komet/Supernova) als
-  // separate Meldung.
+  // separate Meldung. Bugfix (ROADMAP v0.30, derselbe "Polish-Kandidat" wie
+  // der Guardian in v0.27): verteidigt der Spieler allein mit aktivierten
+  // interaktiven Kämpfen, liefert js/events.js resolveSpaceMonster ein
+  // `deferred`-Ereignis statt sofort aufzulösen – wie beim Guardian wird
+  // das Gefecht dann über galaxy.pendingBattles zurückgestellt.
   const galacticEvent = maybeTriggerGalacticEvent(galaxy);
-  if (galacticEvent?.isGuardianBattle) {
+  if (galacticEvent?.deferred) {
+    galaxy.pendingSpaceMonster = { systemId: galacticEvent.systemId };
+    galaxy.pendingBattles = [...galaxy.pendingBattles, { systemId: galacticEvent.systemId, empireIds: [player.id], isSpaceMonster: true }];
+  } else if (galacticEvent?.isGuardianBattle) {
     battleReports.push(galacticEvent);
   }
 
@@ -351,7 +360,7 @@ export function simulateTurn(galaxy) {
     battleReports,
     gameEnd,
     councilVote,
-    galacticEvent: galacticEvent && !galacticEvent.isGuardianBattle ? galacticEvent : null,
+    galacticEvent: galacticEvent && !galacticEvent.isGuardianBattle && !galacticEvent.deferred ? galacticEvent : null,
     shipsBuilt,
     newDiscoveries,
   };
@@ -370,14 +379,7 @@ export function applyBattleResult(galaxy, systemId, result) {
   // sie in derselben Flotte standen wie kämpfende Kriegsschiffe. Ohne diese
   // Sonderbehandlung würde die blanke Flotten-Neuaufbau-Logik unten sie mit
   // löschen, obwohl sie am Gefecht gar nicht beteiligt waren.
-  const empireIdsInBattle = new Set(result.empireIds);
-  const survivingNonCombatFleets = [];
-  for (const fleet of galaxy.fleets) {
-    if (fleet.systemId !== systemId || fleet.destinationSystemId || !empireIdsInBattle.has(fleet.ownerEmpireId)) continue;
-    const empire = galaxy.empires.find((e) => e.id === fleet.ownerEmpireId);
-    const nonCombatStacks = fleet.stacks.filter((s) => !empire?.shipDesigns.some((d) => d.id === s.designId));
-    if (nonCombatStacks.length > 0) survivingNonCombatFleets.push({ ...fleet, stacks: nonCombatStacks });
-  }
+  const survivingNonCombatFleets = extractNonCombatStacks(galaxy, systemId, new Set(result.empireIds));
 
   galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === systemId && !f.destinationSystemId));
   galaxy.fleets.push(...survivingNonCombatFleets);
@@ -415,6 +417,18 @@ export function resolvePendingBattleAuto(galaxy, systemId) {
   // Kampf-Grid entschieden wird.
   if (isOrionGuarded(galaxy, systemId)) {
     return resolveOrionGuardianCombat(galaxy);
+  }
+  // Weltraum-Monster (ROADMAP v0.30): dieselbe Problematik wie beim Guardian
+  // oben – der Monster selbst ist kein Flotten-Eintrag in galaxy.fleets,
+  // daher auch hier ein Sonderfall statt der regulären Zwei-Imperien-Prüfung.
+  if (galaxy.pendingSpaceMonster?.systemId === systemId) {
+    const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
+    const result = resolveMonsterBattle(fleetsHere, galaxy.empires, SPACE_MONSTER_STATS);
+    if (!result) {
+      galaxy.pendingSpaceMonster = null;
+      return null;
+    }
+    return applyInteractiveSpaceMonsterResult(galaxy, systemId, result);
   }
   const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
   const result = resolveSystemCombat(fleetsHere, galaxy.empires);

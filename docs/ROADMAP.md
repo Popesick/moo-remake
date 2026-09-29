@@ -1077,11 +1077,57 @@ spielbar von der Kolonisierung bis zum Sieg.
   Karten-Screenshot-Vergleich sichtbar unterschiedlich groß. 40-Runden-
   Regression ohne Fehler.
 
+- **v0.30 – Interaktives Kampf-Grid für Weltraum-Monster & Kolonieschiff-Bugfix**
+  Nutzerwunsch: der in v0.29 offen gelassene "Polish-Kandidat" – galaktische
+  Zufallsereignis-Kämpfe (Weltraum-Monster, ROADMAP v0.10) liefen bislang
+  immer über die statistische Sofort-Auflösung, genau wie der Guardian of
+  Orion vor seinem Bugfix in v0.27.
+
+  Anders als beim Guardian (fester Bewacher an einem bekannten System) wird
+  das Ziel eines Weltraum-Monster-Angriffs erst zur Laufzeit zufällig unter
+  allen kolonisierten Systemen ausgewürfelt (`js/events.js`
+  resolveSpaceMonster). Verteidigt der Spieler dort ALLEIN (kein weiteres
+  Imperium gleichzeitig anwesend – das Kampf-Grid unterstützt nur
+  Zwei-Parteien-Gefechte) und hat interaktive Kämpfe aktiviert, liefert der
+  Resolver jetzt ein `deferred`-Ereignis statt sofort aufzulösen;
+  `js/economy.js` `simulateTurn` stellt das Gefecht dann wie ein reguläres
+  Zwei-Imperien-Gefecht über `galaxy.pendingBattles` zurück und setzt
+  zusätzlich `galaxy.pendingSpaceMonster = { systemId }` als transienten
+  Marker (anders als `galaxy.orion.guardianAlive` nur für eine einzelne
+  Begegnung gültig, danach wieder gelöscht). `js/hexcombat.js` createBattle
+  fragt diesen Marker genau wie beim Guardian ab und baut das
+  Weltraum-Monster als eigenen Kampf-Grid-Gegner auf – `buildGuardianUnit`
+  wurde dafür zum generischen `buildMonsterUnit(stats, designId)`
+  verallgemeinert. Das Weltraum-Monster hat noch keine eigene Grafik (siehe
+  ROADMAP v0.29 Schiffsgrafiken) und fällt daher auf einen vergrößerten
+  Platzhalter-Kreis zurück, statt auf ein Ausrüstungs-generisches Ersatzbild
+  auszuweichen.
+
+  **Bugfix (nebenbei entdeckt):** beim Testen fiel auf, dass Kolonieschiffe,
+  die zufällig zusammen mit einer kämpfenden Flotte an einem
+  Guardian- oder Weltraum-Monster-System standen, den Kampfausgang
+  unabhängig vom Ergebnis mit erlitten – sie wurden von der Flotten-
+  Neuaufbau-Logik in `js/orion.js`/`js/events.js` blank mitgelöscht, obwohl
+  sie (wie bei regulären Zwei-Imperien-Gefechten in `js/economy.js`
+  applyBattleResult bereits korrekt behandelt) nie am Kampf teilnehmen.
+  Die Rettungs-Logik aus `applyBattleResult` ist jetzt als
+  `js/fleets.js` `extractNonCombatStacks` extrahiert und wird von allen drei
+  Stellen geteilt.
+
+  Verifiziert: `createBattle` baut bei gesetztem `galaxy.pendingSpaceMonster`
+  korrekt ein Zwei-Parteien-Gefecht mit dem Weltraum-Monster (800 HP) als
+  Gegner; vollständiger Durchlauf über den echten "Runde beenden"-Button
+  bei einer per Turn/Seed-Bruteforce gezielt herbeigeführten Begegnung
+  (Kampf-Grid öffnet sich automatisch, "Automatisch auflösen" liefert
+  korrekten Kampfbericht, `pendingSpaceMonster` wird danach gelöscht);
+  Kolonieschiff-Erhalt für Guardian- UND Weltraum-Monster-Gefecht per
+  direktem Modul-Aufruf bestätigt (Kolonieschiff überlebt, obwohl die
+  kämpfende Flotte vollständig verliert). 50-Runden-Regression ohne Fehler.
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidaten: interaktives Kampf-Grid auch für galaktische
-  Zufallsereignis-Kämpfe, tatsächliche Musik-/Soundeffekt-
-  Dateien für die in v0.21 gebaute Audio-Infrastruktur
+- Polish-Kandidat: tatsächliche Musik-/Soundeffekt-Dateien für die in v0.21
+  gebaute Audio-Infrastruktur
 
 ## Grafik-Pipeline
 

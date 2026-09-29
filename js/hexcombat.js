@@ -35,6 +35,7 @@ import {
 } from "./combat.js";
 import { isOrionGuarded } from "./orion.js";
 import { GUARDIAN_STATS } from "./data/orionGuardian.js";
+import { SPACE_MONSTER_STATS } from "./data/galacticEvents.js";
 
 export const GRID_COLS = 11;
 export const GRID_ROWS = 7;
@@ -235,28 +236,30 @@ export function attackableTargets(battle, unit) {
   );
 }
 
-// Guardian of Orion im Kampf-Grid (ROADMAP v0.27, Nutzer-Feedback: das
-// interaktive Kampf-Grid griff bei Guardian-Gefechten bisher gar nicht,
-// obwohl die Einstellung aktiv war – createBattle verlangte zwingend zwei
-// ECHTE Imperien). Der Guardian ist kein Flotten-Eintrag in galaxy.fleets
-// und hat keine Spezialfähigkeiten/Schiffsdesign, daher ein eigener,
+// Nicht-imperiale Gegner im Kampf-Grid (ROADMAP v0.27 für den Guardian of
+// Orion, ROADMAP v0.30 für Weltraum-Monster aus galaktischen
+// Zufallsereignissen – js/events.js resolveSpaceMonster): das interaktive
+// Kampf-Grid griff bei solchen Gefechten zuvor gar nicht, obwohl die
+// Einstellung aktiv war – createBattle verlangte zwingend zwei ECHTE
+// Imperien. Diese Gegner sind kein Flotten-Eintrag in galaxy.fleets und
+// haben keine Spezialfähigkeiten/Schiffsdesign, daher ein eigener,
 // minimaler Einheiten-Baustein statt der Design-Lookup-Logik unten.
-function buildGuardianUnit() {
-  const moveRange = tacticalMoveRange({ speed: GUARDIAN_STATS.speed, hullEvasionBonus: 0 });
+function buildMonsterUnit(stats, designId) {
+  const moveRange = tacticalMoveRange({ speed: stats.speed, hullEvasionBonus: 0 });
   return {
-    id: "guardian-0",
+    id: `${designId}-0`,
     empireId: MONSTER_EMPIRE_ID,
-    designId: "guardian",
-    designName: GUARDIAN_STATS.name,
+    designId,
+    designName: stats.name,
     count: 1,
-    shipHp: [GUARDIAN_STATS.hp],
-    maxHp: GUARDIAN_STATS.hp,
-    shield: GUARDIAN_STATS.shield,
-    speed: GUARDIAN_STATS.speed,
+    shipHp: [stats.hp],
+    maxHp: stats.hp,
+    shield: stats.shield,
+    speed: stats.speed,
     hullEvasionBonus: 0,
-    attackRating: GUARDIAN_STATS.attackRating,
+    attackRating: stats.attackRating,
     ecmDefense: 0,
-    weapons: GUARDIAN_STATS.weapons,
+    weapons: stats.weapons,
     rangeBonus: 0,
     moveRange,
     col: GRID_COLS - 1,
@@ -282,19 +285,25 @@ function buildGuardianUnit() {
 // interaktiv spielbar ist (mehr als zwei Parteien, oder der Spieler ist gar
 // nicht beteiligt) – der Aufrufer soll dann auf die Auto-Auflösung
 // zurückfallen. Ausnahme: der Spieler allein gegen den Guardian of Orion
-// (siehe buildGuardianUnit oben) gilt ebenfalls als spielbares
-// Zwei-Parteien-Gefecht, auch wenn galaxy.fleets dafür nur den Spieler
-// führt.
+// oder ein Weltraum-Monster (siehe buildMonsterUnit oben) gilt ebenfalls
+// als spielbares Zwei-Parteien-Gefecht, auch wenn galaxy.fleets dafür nur
+// den Spieler führt.
 export function createBattle(galaxy, systemId, playerEmpireId) {
   const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
   const realEmpireIds = [...new Set(fleetsHere.map((f) => f.ownerEmpireId))];
 
   const isGuardianBattle =
     isOrionGuarded(galaxy, systemId) && realEmpireIds.length === 1 && realEmpireIds[0] === playerEmpireId;
-  if (!isGuardianBattle && (realEmpireIds.length !== 2 || !realEmpireIds.includes(playerEmpireId))) return null;
+  const isSpaceMonsterBattle =
+    !isGuardianBattle &&
+    galaxy.pendingSpaceMonster?.systemId === systemId &&
+    realEmpireIds.length === 1 &&
+    realEmpireIds[0] === playerEmpireId;
+  const isMonsterBattle = isGuardianBattle || isSpaceMonsterBattle;
+  if (!isMonsterBattle && (realEmpireIds.length !== 2 || !realEmpireIds.includes(playerEmpireId))) return null;
 
-  const enemyEmpireId = isGuardianBattle ? MONSTER_EMPIRE_ID : realEmpireIds.find((id) => id !== playerEmpireId);
-  const empireIds = isGuardianBattle ? [playerEmpireId, MONSTER_EMPIRE_ID] : realEmpireIds;
+  const enemyEmpireId = isMonsterBattle ? MONSTER_EMPIRE_ID : realEmpireIds.find((id) => id !== playerEmpireId);
+  const empireIds = isMonsterBattle ? [playerEmpireId, MONSTER_EMPIRE_ID] : realEmpireIds;
 
   const system = galaxy.systems.find((s) => s.id === systemId);
   const abilitiesByEmpire = new Map();
@@ -385,7 +394,10 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
   }
 
   if (isGuardianBattle) {
-    units.push(buildGuardianUnit());
+    units.push(buildMonsterUnit(GUARDIAN_STATS, "guardian"));
+    startCounts[MONSTER_EMPIRE_ID] = 1;
+  } else if (isSpaceMonsterBattle) {
+    units.push(buildMonsterUnit(SPACE_MONSTER_STATS, "spacemonster"));
     startCounts[MONSTER_EMPIRE_ID] = 1;
   }
 
@@ -399,6 +411,7 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
     playerEmpireId,
     enemyEmpireId,
     isGuardianBattle,
+    isSpaceMonsterBattle,
     units,
     round: 1,
     log: [],

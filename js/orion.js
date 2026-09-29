@@ -9,6 +9,7 @@
 import { DISCIPLINES } from "./data/disciplines.js";
 import { GUARDIAN_STATS, DEATH_RAY_TECH_ID } from "./data/orionGuardian.js";
 import { resolveGuardianBattle, GUARDIAN_EMPIRE_ID } from "./combat.js";
+import { extractNonCombatStacks } from "./fleets.js";
 
 // "Vier zufällige Advanced Technologies" aus dem Original werden hier als
 // pauschaler Miniaturisierungs-Sprung über alle Disziplinen abstrahiert, da
@@ -81,7 +82,13 @@ function applyGuardianVictoryRewards(galaxy, result, empireIds) {
 function finalizeGuardianCombat(galaxy, systemId, result) {
   const empireIds = result.empireIds.filter((id) => id !== GUARDIAN_EMPIRE_ID);
 
+  // Kolonieschiffe, die zufällig mit einer kämpfenden Flotte am
+  // Guardian-System standen, dürfen den Kampfausgang nicht mit erleiden
+  // (Bugfix ROADMAP v0.30, dieselbe Problematik wie js/economy.js
+  // applyBattleResult, siehe js/fleets.js extractNonCombatStacks).
+  const survivingNonCombatFleets = extractNonCombatStacks(galaxy, systemId, new Set(empireIds));
   galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === systemId && !f.destinationSystemId));
+  galaxy.fleets.push(...survivingNonCombatFleets);
   for (const empireId of empireIds) {
     const stacks = result.survivorsByEmpire.get(empireId) ?? [];
     if (stacks.length === 0) continue;
