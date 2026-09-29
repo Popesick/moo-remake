@@ -931,10 +931,51 @@ spielbar von der Kolonisierung bis zum Sieg.
   selben System lösen weiterhin normalen Kampf aus. 50-Runden-Regression
   über die echte `simulateTurn`-Kette ohne Fehler.
 
+- **v0.27 – Bugfix: interaktive Kämpfe gegen den Guardian of Orion**
+  Nutzer-Feedback: "Interaktive Kämpfe funktioniert nicht. Obwohl die
+  Option aktiv war wurde der Kampf gegen den Guardian automatisch
+  ausgewürfelt." Ursache: `js/economy.js` `simulateTurn` rief für
+  Guardian-Gefechte IMMER `resolveOrionGuardianCombat` (statistische
+  Sofort-Auflösung) auf, unabhängig von der Interaktive-Kämpfe-Einstellung
+  – ein komplett separater Codepfad neben der regulären
+  `resolveAllCombats`/`pendingBattles`-Weiche für Zwei-Imperien-Gefechte,
+  der die Einstellung schlicht nie geprüft hat.
+
+  `simulateTurn` stellt ein Guardian-Gefecht jetzt genauso zurück
+  (`galaxy.pendingBattles`), wenn der Spieler mit einer Flotte am
+  Guardian-System steht und interaktive Kämpfe aktiv sind.
+  `js/hexcombat.js` `createBattle` unterstützt den Guardian jetzt als
+  besonderen zweiten Gegner (`buildGuardianUnit`, `MONSTER_EMPIRE_ID`
+  statt eines echten Imperiums) – er ist kein Eintrag in `galaxy.fleets`
+  und hat keine Spezialfähigkeiten/Schiffsdesign, daher ein eigener,
+  minimaler Einheiten-Baustein statt der Design-Lookup-Logik für reguläre
+  Flotten. Die Nachbearbeitung (Sieg-Belohnungen: Death-Ray-Technologie
+  und Miniaturisierungsbonus auf alle Disziplinen, `galaxy.orion.
+  guardianAlive`/`defeatedByEmpireId` für den Highscore) ist als
+  `finalizeGuardianCombat` aus `js/orion.js` `resolveOrionGuardianCombat`
+  herausgezogen und wird jetzt von beiden Pfaden geteilt – der neuen
+  `applyInteractiveGuardianResult` (Kampf-Grid) und der bestehenden
+  Auto-Auflösung. Auch "Automatisch auflösen" INNERHALB des Kampf-Grids
+  (`resolvePendingBattleAuto`) kennt den Guardian jetzt, statt bei nur
+  einer "echten" Partei am System (der Guardian selbst ist ja keine
+  Flotte) folgenlos leerzulaufen.
+
+  Verifiziert über echte Klicks in der Live-UI: mit aktivierter
+  Einstellung öffnet "Runde beenden" am Guardian-System jetzt das
+  Kampf-Grid statt automatisch auszuwürfeln, Guardian erscheint als
+  eigene rot markierte Einheit (10.000 HP) auf der gegnerischen Seite;
+  Niederlage- UND Sieg-Szenario je einmal per "Automatisch auflösen"
+  innerhalb des Grids durchgespielt – Niederlage lässt den Guardian am
+  Leben und meldet den Kampfbericht korrekt, Sieg setzt
+  `guardianAlive: false`, `defeatedByEmpireId` korrekt und schaltet
+  Death-Ray-Technologie sowie den Miniaturisierungsbonus frei. Reguläres
+  Zwei-Imperien-Kampf-Grid per Regressionstest unverändert funktionsfähig
+  (`isGuardianBattle: false`). 40-Runden-Regression ohne Fehler.
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-
-  und galaktische Zufallsereignis-Kämpfe, tatsächliche Musik-/Soundeffekt-
+- Polish-Kandidaten: interaktives Kampf-Grid auch für galaktische
+  Zufallsereignis-Kämpfe, tatsächliche Musik-/Soundeffekt-
   Dateien für die in v0.21 gebaute Audio-Infrastruktur
 
 ## Grafik-Pipeline

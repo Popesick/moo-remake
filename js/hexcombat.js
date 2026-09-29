@@ -31,7 +31,10 @@ import {
   rangeBonusForEmpire,
   rangeDamageMultiplier,
   MAX_ROUNDS,
+  MONSTER_EMPIRE_ID,
 } from "./combat.js";
+import { isOrionGuarded } from "./orion.js";
+import { GUARDIAN_STATS } from "./data/orionGuardian.js";
 
 export const GRID_COLS = 11;
 export const GRID_ROWS = 7;
@@ -232,21 +235,70 @@ export function attackableTargets(battle, unit) {
   );
 }
 
+// Guardian of Orion im Kampf-Grid (ROADMAP v0.27, Nutzer-Feedback: das
+// interaktive Kampf-Grid griff bei Guardian-Gefechten bisher gar nicht,
+// obwohl die Einstellung aktiv war – createBattle verlangte zwingend zwei
+// ECHTE Imperien). Der Guardian ist kein Flotten-Eintrag in galaxy.fleets
+// und hat keine Spezialfähigkeiten/Schiffsdesign, daher ein eigener,
+// minimaler Einheiten-Baustein statt der Design-Lookup-Logik unten.
+function buildGuardianUnit() {
+  const moveRange = tacticalMoveRange({ speed: GUARDIAN_STATS.speed, hullEvasionBonus: 0 });
+  return {
+    id: "guardian-0",
+    empireId: MONSTER_EMPIRE_ID,
+    designId: "guardian",
+    designName: GUARDIAN_STATS.name,
+    count: 1,
+    shipHp: [GUARDIAN_STATS.hp],
+    maxHp: GUARDIAN_STATS.hp,
+    shield: GUARDIAN_STATS.shield,
+    speed: GUARDIAN_STATS.speed,
+    hullEvasionBonus: 0,
+    attackRating: GUARDIAN_STATS.attackRating,
+    ecmDefense: 0,
+    weapons: GUARDIAN_STATS.weapons,
+    rangeBonus: 0,
+    moveRange,
+    col: GRID_COLS - 1,
+    row: Math.floor(GRID_ROWS / 2),
+    hasMoved: false,
+    hasActed: false,
+    hasOracle: false,
+    hasNullifier: false,
+    hasRepulsor: false,
+    regenFraction: 0,
+    missileDefenseChance: 0,
+    splashDamage: 0,
+    dodgeChance: 0,
+    specialDevice: null,
+    usedSpecial: false,
+    frozenRounds: 0,
+  };
+}
+
 // Baut den Kampf für ein System auf: genau ein Hexfeld-Stack pro
 // (Imperium, Design) – Kolonieschiffe (kein reguläres Design) nehmen wie
 // bei der Auto-Auflösung nicht teil. Liefert null, wenn das Gefecht nicht
 // interaktiv spielbar ist (mehr als zwei Parteien, oder der Spieler ist gar
 // nicht beteiligt) – der Aufrufer soll dann auf die Auto-Auflösung
-// zurückfallen.
+// zurückfallen. Ausnahme: der Spieler allein gegen den Guardian of Orion
+// (siehe buildGuardianUnit oben) gilt ebenfalls als spielbares
+// Zwei-Parteien-Gefecht, auch wenn galaxy.fleets dafür nur den Spieler
+// führt.
 export function createBattle(galaxy, systemId, playerEmpireId) {
   const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
-  const empireIds = [...new Set(fleetsHere.map((f) => f.ownerEmpireId))];
-  if (empireIds.length !== 2 || !empireIds.includes(playerEmpireId)) return null;
-  const enemyEmpireId = empireIds.find((id) => id !== playerEmpireId);
+  const realEmpireIds = [...new Set(fleetsHere.map((f) => f.ownerEmpireId))];
+
+  const isGuardianBattle =
+    isOrionGuarded(galaxy, systemId) && realEmpireIds.length === 1 && realEmpireIds[0] === playerEmpireId;
+  if (!isGuardianBattle && (realEmpireIds.length !== 2 || !realEmpireIds.includes(playerEmpireId))) return null;
+
+  const enemyEmpireId = isGuardianBattle ? MONSTER_EMPIRE_ID : realEmpireIds.find((id) => id !== playerEmpireId);
+  const empireIds = isGuardianBattle ? [playerEmpireId, MONSTER_EMPIRE_ID] : realEmpireIds;
 
   const system = galaxy.systems.find((s) => s.id === systemId);
   const abilitiesByEmpire = new Map();
-  for (const empireId of empireIds) {
+  for (const empireId of realEmpireIds) {
     const empire = galaxy.empires.find((e) => e.id === empireId);
     const ownsSystem = system?.planets.some((p) => p.colonizedBy === empireId) ?? false;
     abilitiesByEmpire.set(empireId, computeAbilities(empire, ownsSystem));
@@ -255,12 +307,9 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
   // Space Teleporter, aber nur solange das Gefecht über einer eigenen
   // Kolonie des Interdiktor-Besitzers stattfindet – braucht die
   // Fähigkeiten beider Seiten, daher erst hier nach obiger Schleife
-  // aufgelöst.
-  // Warp Dissipator (ROADMAP v0.19): reduziert den Ausweichwert ALLER
-  // gegnerischen Einheiten für die Dauer des Gefechts – vereinfacht als
-  // fester Malus statt der Techtree-Formulierung "pro Runde", um die
-  // Rundenauflösung nicht mit zusätzlichem Zustand pro Einheit zu belasten.
-  for (const empireId of empireIds) {
+  // aufgelöst. Der Guardian hat keine dieser Fähigkeiten (`other`/`mine`
+  // bleiben dann undefined bzw. unverändert).
+  for (const empireId of realEmpireIds) {
     const otherId = empireIds.find((id) => id !== empireId);
     const mine = abilitiesByEmpire.get(empireId);
     const other = abilitiesByEmpire.get(otherId);
@@ -272,7 +321,7 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
   const startCounts = {};
   let uid = 0;
 
-  for (const empireId of empireIds) {
+  for (const empireId of realEmpireIds) {
     const empire = galaxy.empires.find((e) => e.id === empireId);
     const attackRating = attackRatingFor(empire) + abilitiesByEmpire.get(empireId).attackBonusFlat;
     // Feuerreichweitenbonus durch High Energy Focus (ROADMAP v0.18) einmal
@@ -335,6 +384,11 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
     });
   }
 
+  if (isGuardianBattle) {
+    units.push(buildGuardianUnit());
+    startCounts[MONSTER_EMPIRE_ID] = 1;
+  }
+
   if (!units.some((u) => u.empireId === playerEmpireId) || !units.some((u) => u.empireId === enemyEmpireId)) {
     return null;
   }
@@ -344,6 +398,7 @@ export function createBattle(galaxy, systemId, playerEmpireId) {
     empireIds,
     playerEmpireId,
     enemyEmpireId,
+    isGuardianBattle,
     units,
     round: 1,
     log: [],

@@ -72,17 +72,13 @@ function applyGuardianVictoryRewards(galaxy, result, empireIds) {
 // Löst — sofern der Guardian noch lebt und an seinem System stationäre
 // (nicht mehr reisende) Flotten stehen — ein Gefecht gegen ALLE dort
 // anwesenden Imperien gemeinsam aus (siehe js/combat.js resolveGuardianBattle).
-// Wird nach der regulären Kampfauflösung in js/economy.js simulateTurn
-// aufgerufen.
-export function resolveOrionGuardianCombat(galaxy) {
-  if (!galaxy.orion?.guardianAlive) return null;
-  const systemId = galaxy.orion.systemId;
-  const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
-  if (fleetsHere.length === 0) return null;
-
-  const result = resolveGuardianBattle(fleetsHere, galaxy.empires, GUARDIAN_STATS);
-  if (!result) return null;
-
+// Gemeinsame Nachbearbeitung eines abgeschlossenen Guardian-Gefechts, egal
+// ob automatisch aufgelöst (resolveOrionGuardianCombat) oder über das
+// interaktive Kampf-Grid entschieden (ROADMAP v0.27, siehe
+// applyInteractiveGuardianResult unten und js/hexcombat.js createBattle
+// isGuardianBattle). `result` muss { empireIds (inkl. GUARDIAN_EMPIRE_ID),
+// survivorsByEmpire, guardianDefeated } liefern.
+function finalizeGuardianCombat(galaxy, systemId, result) {
   const empireIds = result.empireIds.filter((id) => id !== GUARDIAN_EMPIRE_ID);
 
   galaxy.fleets = galaxy.fleets.filter((f) => !(f.systemId === systemId && !f.destinationSystemId));
@@ -108,4 +104,33 @@ export function resolveOrionGuardianCombat(galaxy) {
   }
 
   return { ...result, systemId, empireIds, isGuardianBattle: true, monsterName: GUARDIAN_STATS.name, rewardWinnerId };
+}
+
+// Wird nach der regulären Kampfauflösung in js/economy.js simulateTurn
+// aufgerufen (Auto-Auflösung, kein interaktives Kampf-Grid).
+export function resolveOrionGuardianCombat(galaxy) {
+  if (!galaxy.orion?.guardianAlive) return null;
+  const systemId = galaxy.orion.systemId;
+  const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
+  if (fleetsHere.length === 0) return null;
+
+  const result = resolveGuardianBattle(fleetsHere, galaxy.empires, GUARDIAN_STATS);
+  if (!result) return null;
+
+  return finalizeGuardianCombat(galaxy, systemId, result);
+}
+
+// Bugfix (ROADMAP v0.27, Nutzer-Feedback: "Interaktive Kämpfe funktioniert
+// nicht ... Kampf gegen den Guardian wurde automatisch ausgewürfelt"):
+// Guardian-Gefechte liefen bisher IMMER über resolveOrionGuardianCombat
+// oben, unabhängig von der Interaktive-Kämpfe-Einstellung. Wird jetzt von
+// js/main.js aufgerufen, nachdem der Spieler ein Guardian-Gefecht im
+// Kampf-Grid zu Ende gespielt hat (js/hexcombat.js finalizeBattleResult
+// liefert dieselbe {empireIds, survivorsByEmpire, ...}-Form wie
+// resolveGuardianBattle, nur ohne guardianDefeated – das wird hier aus dem
+// Überleben des Guardian-Einheitseintrags abgeleitet).
+export function applyInteractiveGuardianResult(galaxy, systemId, battleResult) {
+  const survivorStacks = battleResult.survivorsByEmpire.get(GUARDIAN_EMPIRE_ID) ?? [];
+  const guardianDefeated = survivorStacks.length === 0;
+  return finalizeGuardianCombat(galaxy, systemId, { ...battleResult, guardianDefeated });
 }

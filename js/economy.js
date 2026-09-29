@@ -294,9 +294,27 @@ export function simulateTurn(galaxy) {
   galaxy.pendingBattles = pendingBattles;
 
   // Guardian of Orion (ROADMAP v0.10): unabhängig vom Diplomatiestatus, da
-  // der Guardian an keiner Diplomatie teilnimmt.
-  const guardianReport = resolveOrionGuardianCombat(galaxy);
-  if (guardianReport) battleReports.push(guardianReport);
+  // der Guardian an keiner Diplomatie teilnimmt. Bugfix (ROADMAP v0.27,
+  // Nutzer-Feedback): lief bisher IMMER automatisch, auch bei aktivierter
+  // Interaktive-Kämpfe-Einstellung. Ist der Spieler mit einer Flotte am
+  // Guardian-System und interaktive Kämpfe sind an, wird das Gefecht wie
+  // jedes andere Zwei-Parteien-Gefecht zurückgestellt (js/main.js öffnet
+  // dafür js/hexcombat.js createBattle, das den Guardian als besonderen
+  // Gegner unterstützt) statt sofort statistisch aufgelöst zu werden.
+  const player = galaxy.empires.find((e) => e.isPlayer);
+  const guardianSystemId = galaxy.orion?.guardianAlive ? galaxy.orion.systemId : null;
+  const guardianPlayerPresent =
+    guardianSystemId != null &&
+    galaxy.fleets.some(
+      (f) => f.systemId === guardianSystemId && !f.destinationSystemId && f.ownerEmpireId === player?.id
+    );
+
+  if (player?.interactiveCombat && guardianPlayerPresent) {
+    galaxy.pendingBattles = [...galaxy.pendingBattles, { systemId: guardianSystemId, empireIds: [player.id], isGuardian: true }];
+  } else {
+    const guardianReport = resolveOrionGuardianCombat(galaxy);
+    if (guardianReport) battleReports.push(guardianReport);
+  }
 
   // Galaktische Zufallsereignisse (ROADMAP v0.10): Kampf-förmige Ereignisse
   // (Weltraum-Monster mit Verteidigern) laufen über dieselbe
@@ -383,6 +401,14 @@ export function applyBattleResult(galaxy, systemId, result) {
 // (ROADMAP v0.16). Die beteiligten Flotten sind bis dahin unverändert am
 // System eingefroren, siehe resolveAllCombats.
 export function resolvePendingBattleAuto(galaxy, systemId) {
+  // Guardian of Orion (ROADMAP v0.27): kein Flotten-Eintrag in galaxy.fleets
+  // an diesem System, daher hätte resolveSystemCombat unten hier nur EINE
+  // Partei (den Spieler) gesehen und wäre folgenlos leer ausgegangen, wenn
+  // eine zurückgestellte Guardian-Begegnung über "Automatisch auflösen" im
+  // Kampf-Grid entschieden wird.
+  if (isOrionGuarded(galaxy, systemId)) {
+    return resolveOrionGuardianCombat(galaxy);
+  }
   const fleetsHere = galaxy.fleets.filter((f) => f.systemId === systemId && !f.destinationSystemId);
   const result = resolveSystemCombat(fleetsHere, galaxy.empires);
   if (!result) return null;

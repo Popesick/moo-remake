@@ -167,7 +167,10 @@ export function renderHexCombat(battle, galaxy, callbacks) {
     if (unit.count <= 0) continue;
     const { x, y } = hexToPixel(unit.col, unit.row);
     const owner = galaxy.empires.find((e) => e.id === unit.empireId);
-    const color = owner?.color ?? "#ffffff";
+    // Guardian of Orion (ROADMAP v0.27) ist kein Eintrag in galaxy.empires
+    // und bekommt daher eine feste, bedrohlich wirkende Signalfarbe statt
+    // des Fallback-Weiß.
+    const color = owner?.color ?? (unit.designId === "guardian" ? "#b23a3a" : "#ffffff");
     const isSelected = unit.id === selectedUnitId;
     const isTargetable = targetIds.has(unit.id);
     const ringColor = isTargetable ? "#ff5b5b" : isSelected ? "#ffffff" : null;

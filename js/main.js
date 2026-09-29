@@ -5,6 +5,7 @@ import { initAudio, setMusicEnabled, setSfxEnabled, setMusicVolume, setSfxVolume
 import { render, pickSystemAt, fitGalaxyToView, centerCameraOnPoint } from "./render.js";
 import { simulateTurn, orderColonization, computePlanetProduction, applyBattleResult, resolvePendingBattleAuto } from "./economy.js";
 import { createBattle, moveUnitTo, attackWithUnit, endPlayerPhase, retreat, finalizeBattleResult } from "./hexcombat.js";
+import { applyInteractiveGuardianResult } from "./orion.js";
 import { renderHexCombat, resetHexCombatSelection } from "./renderHexCombat.js";
 import { normalizeSliders, normalizeSlidersWithLocks } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
@@ -520,6 +521,19 @@ function finishActiveBattle(report) {
   openNextPendingBattle();
 }
 
+// Wendet das Ergebnis eines im Kampf-Grid zu Ende gespielten Gefechts an.
+// Guardian-Gefechte (ROADMAP v0.27, battle.isGuardianBattle aus
+// js/hexcombat.js createBattle) brauchen die Guardian-spezifische
+// Nachbearbeitung (Sieg-Belohnungen, galaxy.orion.guardianAlive) statt der
+// normalen Zwei-Imperien-Flottenneuaufbau-Logik.
+function finalizeAndApplyBattle(battle) {
+  const result = finalizeBattleResult(battle);
+  if (battle.isGuardianBattle) {
+    return applyInteractiveGuardianResult(gameState.galaxy, battle.systemId, result);
+  }
+  return applyBattleResult(gameState.galaxy, battle.systemId, result);
+}
+
 const hexCombatCallbacks = {
   onMove(unitId, col, row) {
     const battle = gameState.activeBattle;
@@ -538,7 +552,7 @@ const hexCombatCallbacks = {
       return;
     }
     if (battle.finished) {
-      finishActiveBattle(applyBattleResult(gameState.galaxy, battle.systemId, finalizeBattleResult(battle)));
+      finishActiveBattle(finalizeAndApplyBattle(battle));
     } else {
       renderHexCombat(battle, gameState.galaxy, hexCombatCallbacks);
     }
@@ -547,7 +561,7 @@ const hexCombatCallbacks = {
     const battle = gameState.activeBattle;
     endPlayerPhase(battle);
     if (battle.finished) {
-      finishActiveBattle(applyBattleResult(gameState.galaxy, battle.systemId, finalizeBattleResult(battle)));
+      finishActiveBattle(finalizeAndApplyBattle(battle));
     } else {
       renderHexCombat(battle, gameState.galaxy, hexCombatCallbacks);
     }
@@ -556,7 +570,7 @@ const hexCombatCallbacks = {
     const battle = gameState.activeBattle;
     if (!window.confirm("Verbliebene Flotte aus dem Gefecht zurückziehen?")) return;
     retreat(battle, getPlayerEmpire().id);
-    finishActiveBattle(applyBattleResult(gameState.galaxy, battle.systemId, finalizeBattleResult(battle)));
+    finishActiveBattle(finalizeAndApplyBattle(battle));
   },
   onAutoResolve() {
     const battle = gameState.activeBattle;
