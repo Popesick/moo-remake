@@ -1,7 +1,7 @@
 import { generateGalaxy, findSystem } from "./galaxyGen.js";
 import { gameState, saveGame, loadGame, hasSavedGame } from "./state.js";
 import { loadSettings, saveSettings } from "./settings.js";
-import { initAudio, setMusicEnabled, setSfxEnabled, setMusicVolume, setSfxVolume, playMusic } from "./audio.js";
+import { initAudio, setMusicEnabled, setSfxEnabled, setMusicVolume, setSfxVolume, playMusic, playSfx } from "./audio.js";
 import { render, pickSystemAt, fitGalaxyToView, centerCameraOnPoint } from "./render.js";
 import { simulateTurn, orderColonization, computePlanetProduction, applyBattleResult, resolvePendingBattleAuto } from "./economy.js";
 import { createBattle, moveUnitTo, attackWithUnit, endPlayerPhase, retreat, finalizeBattleResult } from "./hexcombat.js";
@@ -517,6 +517,7 @@ function finishActiveBattle(report) {
   const galaxy = gameState.galaxy;
   const systemId = gameState.activeBattle.systemId;
   if (report) gameState.turnEndBattleReports = [...(gameState.turnEndBattleReports ?? []), report];
+  if (Object.values(report?.shipsLostByEmpire ?? {}).some((n) => n > 0)) playSfx("explosion");
   galaxy.pendingBattles = (galaxy.pendingBattles ?? []).filter((p) => p.systemId !== systemId);
   gameState.activeBattle = null;
   updateTopbarInfo(galaxy);
@@ -561,6 +562,7 @@ const hexCombatCallbacks = {
       if (result.reason) flashHexCombatStatus(result.reason);
       return;
     }
+    playSfx("weaponFire");
     if (battle.finished) {
       finishActiveBattle(finalizeAndApplyBattle(battle));
     } else {
@@ -623,6 +625,7 @@ function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, a
       })
     : [];
   renderEventPanel(gameState.turnEvents, eventCallbacks);
+  if (gameState.turnEvents.length > 0) playSfx("alertNotify");
 
   const playerBattles = battleReports.filter((r) => r.empireIds.includes(playerEmpire.id));
   if (playerBattles.length > 0) {
@@ -638,6 +641,7 @@ function finishTurnDisplay(playerEmpire, battleReports, breakthroughsByEmpire, a
 
   const playerBreakthroughs = breakthroughsByEmpire.get(playerEmpire.id);
   if (playerBreakthroughs?.length) {
+    playSfx("breakthrough");
     flashTopbar(`Durchbruch: ${playerBreakthroughs.map((t) => t.name).join(", ")}`);
     return;
   }
@@ -724,6 +728,7 @@ function endTurn() {
   const before = snapshotPlayerState(gameState.galaxy, getPlayerEmpire());
   const { breakthroughsByEmpire, arrivals, battleReports, gameEnd, councilVote, galacticEvent, shipsBuilt, newDiscoveries } =
     simulateTurn(gameState.galaxy);
+  playSfx("endTurn");
   updateTopbarInfo(gameState.galaxy);
   refreshSidePanel();
   requestRender();
@@ -831,6 +836,17 @@ function setupCanvasInteractions() {
   window.addEventListener("resize", () => {
     requestRender();
     if (gameState.activeBattle) renderHexCombat(gameState.activeBattle, gameState.galaxy, hexCombatCallbacks);
+  });
+}
+
+// Dezenter Klick-Sound für JEDEN Button-Klick in der App (ROADMAP v0.31,
+// Nutzerwunsch: Soundeffekte) – per Event-Delegation auf #app, statt jeden
+// der zahlreichen Buttons einzeln zu verdrahten. Spezifischere Effekte
+// (Runde beenden, Waffenfeuer, Durchbruch, Ereignis-Alarm) kommen zusätzlich
+// on top und sind bewusst lauter als dieser Basis-Klick.
+function setupGlobalUiSounds() {
+  document.getElementById("app").addEventListener("click", (e) => {
+    if (e.target.closest("button")) playSfx("uiClick");
   });
 }
 
@@ -999,6 +1015,7 @@ function flashHexCombatStatus(message) {
 function init() {
   setupCanvasInteractions();
   setupDialogAndButtons();
+  setupGlobalUiSounds();
   renderStaticButtons();
   initAudio(currentSettings);
   playMusic("theme");

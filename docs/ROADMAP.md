@@ -1124,10 +1124,43 @@ spielbar von der Kolonisierung bis zum Sieg.
   direktem Modul-Aufruf bestätigt (Kolonieschiff überlebt, obwohl die
   kämpfende Flotte vollständig verliert). 50-Runden-Regression ohne Fehler.
 
+- **v0.31 – Synthetisierte Soundeffekte**
+  Letzter offener Polish-Kandidat aus dem Backlog: die in v0.21 gebaute
+  Audio-Infrastruktur (Einstellungen-Regler für Musik/Soundeffekte,
+  An/Aus, Lautstärke) hatte noch nichts zum Abspielen – `js/audio.js`
+  erwartete echte `.mp3`-Dateien unter `assets/audio/`, die nie im Projekt
+  lagen, und `playSfx` wurde im gesamten Code nirgends aufgerufen.
+
+  Statt echter Audio-Dateien (offene Lizenzfrage, siehe Rückfrage an den
+  Nutzer) synthetisiert `js/audio.js` jetzt sechs kurze Effekte zur
+  Laufzeit per Web Audio API aus Oszillatoren (`playTone`, mit optionalem
+  Frequenz-Sweep) und gefiltertem Rauschen (`playNoiseBurst`): `uiClick`
+  (leiser Klick, per Event-Delegation an jeden Button-Klick in der App
+  gekoppelt, `js/main.js` `setupGlobalUiSounds`), `endTurn` (aufsteigender
+  Zweiklang), `weaponFire` (absteigender Sägezahn-Sweep, bei jedem
+  erfolgreichen Angriff im Kampf-Grid), `explosion` (Rausch-Wumms, wenn ein
+  abgeschlossenes Gefecht `shipsLostByEmpire > 0` auf irgendeiner Seite
+  meldet), `breakthrough` (aufsteigender Dreiklang bei Forschungs-
+  durchbrüchen) und `alertNotify` (zwei helle Pings, wenn das
+  Rundenereignis-Panel aus ROADMAP v0.24 neue Einträge zeigt).
+  Hintergrundmusik bleibt bewusst unimplementiert (`playMusic`/`stopMusic`
+  sind No-Ops) – ein befriedigender Musik-Track lässt sich so nicht
+  sinnvoll erzeugen, nur kurze perkussive Effekte; die Musik-Regler in den
+  Einstellungen bleiben unverändert vorhanden, haben nur weiterhin nichts
+  zum Abspielen.
+
+  Verifiziert: alle sechs Effekte plus ein unbekannter Name per direktem
+  `playSfx`-Aufruf ohne Fehler; `setSfxEnabled(false)` unterdrückt
+  Wiedergabe korrekt, `true` reaktiviert sie; echter Klick auf einen
+  Kopfleisten-Button in der Live-UI löst den delegierten Klick-Sound ohne
+  Konsolenfehler aus; 40-Runden-Regression ohne Fehler. Die zuvor bei
+  jedem Laden auftretenden 404-Konsolenfehler (fehlende
+  `assets/audio/theme.mp3`) sind als Nebeneffekt verschwunden, da
+  `playMusic` keine Datei mehr zu laden versucht.
+
 ## Weitere Post-Prototyp-Releases
 
-- Polish-Kandidat: tatsächliche Musik-/Soundeffekt-Dateien für die in v0.21
-  gebaute Audio-Infrastruktur
+Aktuell keine offenen Polish-Kandidaten.
 
 ## Grafik-Pipeline
 
