@@ -1158,6 +1158,39 @@ spielbar von der Kolonisierung bis zum Sieg.
   `assets/audio/theme.mp3`) sind als Nebeneffekt verschwunden, da
   `playMusic` keine Datei mehr zu laden versucht.
 
+- **v0.32 – Echte Hintergrundmusik**
+  In v0.31 blieb Hintergrundmusik bewusst ein No-Op, mangels eines
+  praktikablen Wegs, ansprechende Musik-Tracks zu erzeugen. Der Nutzer hat
+  daraufhin zehn per Suno KI-generierte Tracks bereitgestellt (Prompt dafür
+  von Claude entworfen), die jetzt unter `assets/audio/` liegen und über
+  `js/audio.js` in vier kontextabhängigen Playlists abgespielt werden:
+  `ingame` (sechs Tracks, allgemeiner Erkundungs-/Wirtschafts-Loop ab
+  Spielstart bzw. sobald kein Kampf-Grid mehr offen ist), `combat` (zwei
+  Tracks, läuft im interaktiven Kampf-Grid), sowie `council` und `victory`
+  (je ein einzelner, vom Nutzer fest zugeordneter Track für Ratssitzungen
+  bzw. den Sieg-Bildschirm – bewusst nicht zufällig wie die anderen beiden
+  Playlists, da hier explizit ein bestimmter Song gewünscht war).
+  `pickNextTrack` wählt bei `ingame`/`combat` zufällig, aber nie denselben
+  Track zweimal hintereinander, und schaltet am Ende jedes Tracks
+  automatisch zum nächsten weiter (kein stures Loopen desselben Songs).
+  `js/main.js` wechselt die Playlist an den passenden Stellen:
+  `openNextPendingBattle` (Kampf-Grid öffnet/schließt sich),
+  `endTurn`/`councilCallbacks.onVote` (Ratssitzung öffnet sich bzw. endet,
+  Spielende-Dialog bei Sieg/Niederlage – Sieg-Musik nur, wenn der Spieler
+  selbst gewinnt, bei Niederlage bleibt die zuletzt laufende Musik
+  unverändert). Da Browser Audiowiedergabe mit Ton meist erst nach einer
+  Nutzerinteraktion erlauben, fängt `js/audio.js` einen fehlgeschlagenen
+  ersten Wiedergabeversuch ab und holt ihn über einen einmaligen
+  Klick-/Tastatur-Listener nach.
+
+  Verifiziert: alle zehn Tracks per direktem `playMusic`-Aufruf mit
+  Netzwerk-Log-Kontrolle bestätigt (korrekte Datei lädt, HTTP 200);
+  vollständiger Durchlauf über die echte UI (Spielstart -> `ingame`,
+  "Runde beenden" mit anstehendem Kampf -> `combat`, "Automatisch
+  auflösen" -> zurück zu `ingame`); Umschalten `council`/`victory` ->
+  `ingame` und zurück per direktem Modul-Aufruf bestätigt; keine
+  Konsolenfehler nach mehrfachem Playlist-Wechsel.
+
 ## Weitere Post-Prototyp-Releases
 
 Aktuell keine offenen Polish-Kandidaten.

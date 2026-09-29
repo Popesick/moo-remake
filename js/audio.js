@@ -1,12 +1,11 @@
-// Soundeffekt-Infrastruktur (ROADMAP v0.21, Synthese seit ROADMAP v0.31,
-// Nutzerwunsch): statt echter Audio-Dateien (Lizenzfrage ungeklärt, siehe
-// ROADMAP-Backlog) werden kurze, perkussive Effekte zur Laufzeit per Web
-// Audio API aus Oszillatoren/Rauschen synthetisiert – kein Datei-Download,
-// kein Lizenzrisiko. Hintergrundmusik ist bewusst NICHT umgesetzt: ein
-// befriedigender Musik-Track lässt sich so nicht sinnvoll erzeugen, nur
-// kurze Effekte. playMusic/stopMusic bleiben als No-Ops bestehen, damit
-// js/main.js unverändert bleibt und die Musik-Regler in den Einstellungen
-// (ROADMAP v0.21) weiterhin funktionieren, ohne etwas abzuspielen.
+// Audio-Infrastruktur (ROADMAP v0.21; Soundeffekt-Synthese seit ROADMAP
+// v0.31; echte Musik-Dateien seit ROADMAP v0.32, vom Nutzer per Suno
+// erzeugt und bereitgestellt). Soundeffekte bleiben synthetisiert (kein
+// Datei-Download, kein Lizenzrisiko für die zahlreichen kurzen UI-Klänge),
+// Hintergrundmusik läuft jetzt über echte .mp3-Dateien unter
+// assets/audio/.
+const AUDIO_BASE = "assets/audio/";
+
 let audioCtx = null;
 function ctx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -14,12 +13,39 @@ function ctx() {
   return audioCtx;
 }
 
+// Playlists nach Kontext (ROADMAP v0.32): "ingame" ist der allgemeine
+// Erkundungs-/Wirtschafts-Loop, der beim Spielstart beginnt; "combat" läuft
+// im interaktiven Kampf-Grid (js/main.js öffnet/schließt es passend zu
+// openHexCombatDialog/closeHexCombatDialog). "ingame" und "combat" sind
+// bewusst Mehr-Track-Playlists mit Shuffle (siehe pickNextTrack) – für "council"
+// und "victory" hat der Nutzer je EINEN festen Track vorgegeben (nicht
+// zufällig, da hier nur ein einzelner, dem Moment zugeordneter Song
+// erwünscht ist); pickNextTrack gibt bei einelementigen Playlists ohnehin
+// immer genau diesen einen Track zurück.
+const PLAYLISTS = {
+  ingame: [
+    "deep_space_transit_1",
+    "deep_space_transit_2",
+    "vast_horizons",
+    "galactic_legacies",
+    "expansion_of_the_unknown_1",
+    "expansion_of_the_unknown_2",
+  ],
+  combat: ["deep_space_conflict_1", "deep_space_conflict_2"],
+  council: ["council_theme"],
+  victory: ["victory_theme"],
+};
+
 const state = {
   musicEnabled: true,
   musicVolume: 0.6,
   sfxEnabled: true,
   sfxVolume: 0.8,
 };
+
+let musicEl = null;
+let currentPlaylistName = null;
+let lastTrackName = null;
 
 export function initAudio(settings) {
   state.musicEnabled = settings.musicEnabled ?? true;
@@ -30,6 +56,9 @@ export function initAudio(settings) {
 
 export function setMusicEnabled(enabled) {
   state.musicEnabled = enabled;
+  if (!musicEl) return;
+  if (enabled) musicEl.play().catch(() => {});
+  else musicEl.pause();
 }
 
 export function setSfxEnabled(enabled) {
@@ -38,14 +67,81 @@ export function setSfxEnabled(enabled) {
 
 export function setMusicVolume(volume) {
   state.musicVolume = volume;
+  if (musicEl) musicEl.volume = volume;
 }
 
 export function setSfxVolume(volume) {
   state.sfxVolume = volume;
 }
 
-export function playMusic() {}
-export function stopMusic() {}
+// Wählt den nächsten Track aus einer Playlist zufällig, aber nie denselben
+// zweimal hintereinander (bei mehr als einem Track) – reines Zufalls-Shuffle
+// würde bei 6 Tracks sichtbar oft direkt wiederholen.
+function pickNextTrack(playlist) {
+  if (playlist.length === 1) return playlist[0];
+  let candidate;
+  do {
+    candidate = playlist[Math.floor(Math.random() * playlist.length)];
+  } while (candidate === lastTrackName);
+  return candidate;
+}
+
+function playTrack(name) {
+  lastTrackName = name;
+  if (!musicEl) {
+    musicEl = new Audio();
+    // Kein `loop = true`: beim Ende eines Tracks wird automatisch der
+    // nächste (andere) Track derselben Playlist nachgeladen, damit sich
+    // eine lange Partie nicht denselben 8-10-Minuten-Loop wiederholt.
+    musicEl.addEventListener("ended", () => {
+      if (currentPlaylistName) playTrack(pickNextTrack(PLAYLISTS[currentPlaylistName]));
+    });
+  }
+  musicEl.src = `${AUDIO_BASE}${name}.mp3`;
+  musicEl.volume = state.musicVolume;
+  musicEl.onerror = () => {
+    // Fehlende/kaputte Datei: stumm zum nächsten Track derselben Playlist
+    // weiterschalten statt die Wiedergabe ganz abzubrechen.
+    if (currentPlaylistName) playTrack(pickNextTrack(PLAYLISTS[currentPlaylistName]));
+  };
+  if (state.musicEnabled) musicEl.play().catch(() => armAutoplayRetry());
+}
+
+// Browser blockieren Audio-Wiedergabe mit Ton meist, bis der/die Nutzer:in
+// irgendwo auf der Seite interagiert hat – der Aufruf von playMusic("ingame")
+// direkt beim Laden (js/main.js init()) schlägt daher beim ersten Versuch
+// häufig lautlos fehl. Ein einmaliger Listener auf die erste Interaktion
+// holt die Wiedergabe dann nach, statt dass die Musik bis zum nächsten
+// manuellen playMusic-Aufruf (z.B. Laden eines Spielstands) stumm bleibt.
+let autoplayRetryArmed = false;
+function armAutoplayRetry() {
+  if (autoplayRetryArmed) return;
+  autoplayRetryArmed = true;
+  const retry = () => {
+    document.removeEventListener("pointerdown", retry);
+    document.removeEventListener("keydown", retry);
+    if (state.musicEnabled && musicEl && musicEl.paused) musicEl.play().catch(() => {});
+  };
+  document.addEventListener("pointerdown", retry, { once: true });
+  document.addEventListener("keydown", retry, { once: true });
+}
+
+// Startet (bzw. wechselt zu) einer benannten Playlist (siehe PLAYLISTS
+// oben). Ruft bei bereits laufender, identischer Playlist nichts neu auf,
+// damit ein wiederholter Aufruf (z.B. bei jedem Rundenwechsel) den
+// aktuellen Track nicht unterbricht.
+export function playMusic(playlistName) {
+  const playlist = PLAYLISTS[playlistName];
+  if (!playlist || playlist.length === 0) return;
+  if (currentPlaylistName === playlistName && musicEl && !musicEl.paused) return;
+  currentPlaylistName = playlistName;
+  playTrack(pickNextTrack(playlist));
+}
+
+export function stopMusic() {
+  currentPlaylistName = null;
+  if (musicEl) musicEl.pause();
+}
 
 // Einzelner Ton mit kurzer Attack-/Exponential-Decay-Hüllkurve, optional
 // mit Frequenz-Sweep (freqEnd) für Laser-/Sweep-artige Effekte.

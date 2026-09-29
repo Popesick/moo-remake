@@ -475,6 +475,7 @@ function openNextPendingBattle() {
     gameState.turnEndBattleReports = null;
     gameState.activeBattle = null;
     closeHexCombatDialog();
+    playMusic("ingame");
     if (ctx) {
       finishTurnDisplay(
         ctx.playerEmpire,
@@ -510,6 +511,7 @@ function openNextPendingBattle() {
   // renderHexCombat mit einer falschen Notfall-Auflösung zeichnen, die beim
   // Sichtbarwerden verzerrt gestreckt erscheint.
   openHexCombatDialog();
+  playMusic("combat");
   renderHexCombat(battle, galaxy, hexCombatCallbacks);
 }
 
@@ -662,6 +664,10 @@ const councilCallbacks = {
     const pending = pendingCouncilVote;
     pendingCouncilVote = null;
     closeCouncilDialog();
+    // Ratsmusik endet mit der Sitzung; ein evtl. folgender diplomatischer
+    // Sieg (unten) oder ein anschließendes Kampf-Grid (proceedToBattlesOrFinish
+    // -> openNextPendingBattle) überschreibt das bei Bedarf direkt wieder.
+    playMusic("ingame");
     if (!pending) return;
 
     const result = resolveCouncilVote(gameState.galaxy, pending.vote, candidateEmpireIdOrNull);
@@ -675,6 +681,7 @@ const councilCallbacks = {
       recordHallOfFameEntry(gameState.galaxy, diplomaticGameEnd);
       renderGameEnd(diplomaticGameEnd, gameState.galaxy);
       openGameEndDialog();
+      if (result.outcome === "playerVictory") playMusic("victory");
       return;
     }
 
@@ -740,6 +747,7 @@ function endTurn() {
     recordHallOfFameEntry(gameState.galaxy, gameEnd);
     renderGameEnd(gameEnd, gameState.galaxy);
     openGameEndDialog();
+    if (gameEnd.winnerEmpireId === playerEmpire.id) playMusic("victory");
     return;
   }
 
@@ -747,6 +755,7 @@ function endTurn() {
     pendingCouncilVote = { vote: councilVote, battleReports, breakthroughsByEmpire, arrivals, galacticEvent, before, shipsBuilt, newDiscoveries };
     renderCouncilDialog(gameState.galaxy, councilVote, councilCallbacks);
     openCouncilDialog();
+    playMusic("council");
     return;
   }
 
@@ -1018,7 +1027,7 @@ function init() {
   setupGlobalUiSounds();
   renderStaticButtons();
   initAudio(currentSettings);
-  playMusic("theme");
+  playMusic("ingame");
 
   if (hasSavedGame() && loadGame()) {
     if (!gameState.camera || !gameState.camera.zoom) {
