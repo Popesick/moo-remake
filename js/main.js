@@ -6,7 +6,7 @@ import { render, pickSystemAt, fitGalaxyToView, centerCameraOnPoint } from "./re
 import { simulateTurn, orderColonization, computePlanetProduction, applyBattleResult, resolvePendingBattleAuto } from "./economy.js";
 import { createBattle, moveUnitTo, attackWithUnit, endPlayerPhase, retreat, finalizeBattleResult } from "./hexcombat.js";
 import { renderHexCombat, resetHexCombatSelection } from "./renderHexCombat.js";
-import { normalizeSliders } from "./data/economy.js";
+import { normalizeSliders, normalizeSlidersWithLocks } from "./data/economy.js";
 import { normalizeAllocation, selectResearchTarget } from "./research.js";
 import { addShipDesign, scrapShipDesign } from "./shipDesign.js";
 import { sendFleet, splitStack, mergeFleets } from "./fleets.js";
@@ -66,6 +66,9 @@ import {
   renderEmpireDiscoveredDialog,
   openEmpireDiscoveredDialog,
   closeEmpireDiscoveredDialog,
+  renderPlanetsDialog,
+  openPlanetsDialog,
+  closePlanetsDialog,
 } from "./ui.js";
 import { renderShipDesignDialog, openShipDesignDialog, closeShipDesignDialog } from "./shipDesignUI.js";
 
@@ -95,15 +98,34 @@ function getPlayerEmpire() {
   return gameState.galaxy.empires.find((e) => e.isPlayer);
 }
 
+// Öffnet sich sowohl aus der Systemseitenleiste als auch der Planeten-
+// Übersicht (ROADMAP v0.24) auf denselben Planeten – beide müssen nach
+// einer Regler-/Sperren-Änderung aktualisiert werden, egal welche der
+// beiden Ansichten die Änderung ausgelöst hat.
+function refreshPlanetViews() {
+  refreshSidePanel();
+  if (!document.getElementById("planets-dialog").hidden) {
+    renderPlanetsDialog(gameState.galaxy, panelCallbacks);
+  }
+}
+
 const panelCallbacks = {
   onSliderChange(systemId, planetId, key, value) {
     const system = findSystem(gameState.galaxy, systemId);
     const planet = system?.planets.find((p) => p.id === planetId);
     if (!planet) return;
-    planet.sliders[key] = value;
-    planet.sliders = normalizeSliders(planet.sliders);
+    planet.sliders = normalizeSlidersWithLocks(planet.sliders, planet.sliderLocks, key, value);
     planet.lastProduction = computePlanetProduction(planet, getEmpire(planet.colonizedBy));
-    refreshSidePanel();
+    refreshPlanetViews();
+  },
+  onToggleSliderLock(systemId, planetId, key) {
+    const system = findSystem(gameState.galaxy, systemId);
+    const planet = system?.planets.find((p) => p.id === planetId);
+    if (!planet) return;
+    if (!planet.sliderLocks) planet.sliderLocks = {};
+    planet.sliderLocks[key] = !planet.sliderLocks[key];
+    refreshPlanetViews();
+    saveGame();
   },
   onColonize(systemId, planetId) {
     const playerEmpire = gameState.galaxy.empires.find((e) => e.isPlayer);
@@ -808,6 +830,13 @@ function setupDialogAndButtons() {
     openDiplomacyDialog();
   });
   document.getElementById("diplomacy-close").addEventListener("click", closeDiplomacyDialog);
+
+  document.getElementById("btn-planets").addEventListener("click", () => {
+    if (!gameState.galaxy) return;
+    renderPlanetsDialog(gameState.galaxy, panelCallbacks);
+    openPlanetsDialog();
+  });
+  document.getElementById("planets-close").addEventListener("click", closePlanetsDialog);
 
   document.getElementById("btn-home").addEventListener("click", goToHomeSystem);
 

@@ -844,6 +844,41 @@ spielbar von der Kolonisierung bis zum Sieg.
   Event-Bubbling korrekt); 60-Runden-Regression über die echte
   `simulateTurn`/`computeTurnEvents`-Kette ohne Fehler.
 
+- **v0.25 – Planeten-Übersicht mit sperrbaren Reglern**
+  Nutzer-Feedback: eine Gesamtübersicht aller eigenen Planeten fehlte
+  bisher – Produktionswerte ließen sich nur planetenweise über die
+  Kartenauswahl in der Seitenleiste einsehen.
+
+  Neuer Kopfleisten-Button "Planeten" (`js/icons.js` neues Icon,
+  `#planets-dialog`) listet alle eigenen Planeten als Kartenraster
+  (Bild, Porträt, Umwelt/Größe/Ergiebigkeit, Bevölkerung, Fabriken/
+  Produktion, aktuelles Schiffsproduktionsziel samt Baufortschritt,
+  Slider). Die Karten sind dieselbe Komponente wie in der System-
+  Seitenleiste (`buildOwnedPlanetCard`), daher gilt die neue
+  Sperren-Funktion automatisch auch dort.
+
+  **Sperrbare Slider**: hinter jedem der fünf Zuteilungs-Regler sitzt ein
+  Schloss-Icon (`planet.sliderLocks[key]`, neues optionales Feld,
+  Standard ungesetzt/false – kein `SAVE_VERSION`-Bump nötig). Gesperrte
+  Regler behalten ihren Wert, wenn ein anderer Regler verstellt wird; der
+  Rest bis 100% verteilt sich unter den verbleibenden, nicht gesperrten
+  Reglern proportional zu ihrem bisherigen Anteil (bei allen auf 0
+  gleichmäßig). Reicht der freie Platz nicht aus (z. B. alle vier
+  anderen Regler gesperrt), wird der gerade bediente Regler entsprechend
+  gekappt, statt die gesperrten Werte zu verletzen
+  (`js/data/economy.js` `normalizeSlidersWithLocks`, ersetzt
+  `normalizeSliders` als Normalisierung für manuelle Slider-Eingaben;
+  `normalizeSliders` bleibt für die Fälle ohne Sperr-Kontext bestehen).
+
+  Verifiziert: `normalizeSlidersWithLocks` per direktem Modul-Aufruf für
+  drei Szenarien (ein gesperrter Regler, zwei gesperrte Regler mit
+  Kappung des gezogenen Reglers, alle vier anderen gesperrt); Summe in
+  allen Fällen exakt 100. Vollständiger Durchlauf in der Live-UI: Dialog
+  öffnet mit korrekten Karten, Schloss-Klick sperrt/entsperrt (aktive
+  Färbung), Regler-Drag verteilt den Rest live und korrekt unter den
+  freien Reglern, Zustand ist danach im echten Planeten-Objekt persistiert
+  und übersteht 40 simulierte Runden unverändert.
+
 ## Weitere Post-Prototyp-Releases
 
 - Polish-Kandidaten: interaktives Kampf-Grid auch für Guardian-of-Orion-

@@ -183,7 +183,7 @@ html, body {
 
 .slider-row {
   display: grid;
-  grid-template-columns: 3.4rem 1fr 2.6rem;
+  grid-template-columns: 3.4rem 1fr 2.6rem 1.6rem;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.75rem;
@@ -192,6 +192,28 @@ html, body {
 
 .slider-row input[type="range"] {
   width: 100%;
+}
+
+.slider-lock-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 0.15rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slider-lock-btn:hover {
+  border-color: var(--panel-border);
+  color: var(--text);
+}
+
+.slider-lock-btn.active {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
 }
 
 .production-line {
@@ -444,6 +466,26 @@ button:hover {
   width: min(96vw, 1200px);
   height: 90vh;
   max-height: 90vh;
+}
+
+.dialog-planets {
+  width: min(92vw, 980px);
+}
+
+#planets-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.7rem;
+}
+
+#planets-list li {
+  background: #10182c;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
 }
 
 #hexcombat-body {

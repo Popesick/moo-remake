@@ -146,6 +146,7 @@ function buildOwnedPlanetCard(system, planet, empire, callbacks) {
   for (const key of ["ship", "def", "ind", "eco", "tech"]) {
     const row = document.createElement("div");
     row.className = "slider-row";
+    const locked = planet.sliderLocks?.[key] ?? false;
 
     const label = document.createElement("span");
     label.textContent = SLIDER_LABELS[key];
@@ -164,6 +165,17 @@ function buildOwnedPlanetCard(system, planet, empire, callbacks) {
     const value = document.createElement("span");
     value.textContent = `${Math.round(planet.sliders[key])}%`;
     row.appendChild(value);
+
+    if (empire?.isPlayer && callbacks.onToggleSliderLock) {
+      const lockBtn = document.createElement("button");
+      lockBtn.className = `slider-lock-btn${locked ? " active" : ""}`;
+      lockBtn.title = locked ? "Entsperren" : "Sperren (Wert bleibt fix, wenn andere Regler verstellt werden)";
+      lockBtn.innerHTML = iconSvg(locked ? "lock" : "unlock", 14);
+      lockBtn.addEventListener("click", () => {
+        callbacks.onToggleSliderLock(system.id, planet.id, key);
+      });
+      row.appendChild(lockBtn);
+    }
 
     li.appendChild(row);
   }
@@ -685,6 +697,7 @@ export function renderStaticButtons() {
   document.getElementById("btn-shipdesign").innerHTML = `${iconSvg("shipdesign")}<span>Schiffsdesign</span>`;
   document.getElementById("btn-diplomacy").innerHTML = `${iconSvg("diplomacy")}<span>Diplomatie</span>`;
   document.getElementById("btn-end-turn").innerHTML = `${iconSvg("endturn")}<span>Runde beenden</span>`;
+  document.getElementById("btn-planets").innerHTML = iconSvg("planets", 20);
   document.getElementById("btn-home").innerHTML = iconSvg("home", 20);
   document.getElementById("btn-halloffame").innerHTML = iconSvg("halloffame", 20);
   document.getElementById("btn-menu").innerHTML = iconSvg("menu", 20);
@@ -1031,6 +1044,46 @@ export function openCouncilDialog() {
 
 export function closeCouncilDialog() {
   document.getElementById("council-dialog").hidden = true;
+}
+
+// Planeten-Übersicht (ROADMAP v0.24, Nutzer-Feedback): listet alle eigenen
+// Planeten mit Bild, Schiebereglern (inkl. Sperren-Schloss je Zeile),
+// Kennzahlen und aktueller Schiffsproduktion – dieselbe Karte wie die
+// Seitenleiste (buildOwnedPlanetCard), nur für alle Systeme auf einen Blick
+// statt nur das gerade ausgewählte.
+export function renderPlanetsDialog(galaxy, callbacks) {
+  const player = galaxy.empires.find((e) => e.isPlayer);
+  if (!player) return;
+
+  const list = document.getElementById("planets-list");
+  list.innerHTML = "";
+
+  const owned = [];
+  for (const system of galaxy.systems) {
+    for (const planet of system.planets) {
+      if (planet.colonizedBy === player.id) owned.push({ system, planet });
+    }
+  }
+
+  if (owned.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "dialog-hint";
+    empty.textContent = "Noch keine besiedelten Planeten.";
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const { system, planet } of owned) {
+    list.appendChild(buildOwnedPlanetCard(system, planet, player, callbacks));
+  }
+}
+
+export function openPlanetsDialog() {
+  document.getElementById("planets-dialog").hidden = false;
+}
+
+export function closePlanetsDialog() {
+  document.getElementById("planets-dialog").hidden = true;
 }
 
 // Rundenereignis-Panel (ROADMAP v0.24, Nutzer-Feedback): listet die von

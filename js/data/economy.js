@@ -37,3 +37,31 @@ export function normalizeSliders(sliders) {
   };
   return out;
 }
+
+export const SLIDER_KEYS = ["ship", "def", "ind", "eco", "tech"];
+
+// Geänderten Schieberegler auf `rawValue` setzen und die Summe wieder auf
+// 100% bringen, OHNE die per `locks` (Planeten-Übersicht, ROADMAP v0.24)
+// eingefrorenen Regler zu verändern – nur die verbleibenden, nicht
+// gesperrten Regler teilen sich den Rest proportional zu ihrem bisherigen
+// Anteil (bei 0 gleichmäßig). Der gerade bediente Regler selbst gilt für
+// diese eine Änderung nicht als "gesperrt", auch wenn er es ist – man kann
+// ihn weiterhin verschieben, nur die ANDEREN Regler halten dann ihren Wert.
+export function normalizeSlidersWithLocks(sliders, locks, changedKey, rawValue) {
+  const fixedKeys = SLIDER_KEYS.filter((k) => k !== changedKey && locks?.[k]);
+  const freeKeys = SLIDER_KEYS.filter((k) => k !== changedKey && !locks?.[k]);
+  const fixedSum = fixedKeys.reduce((sum, k) => sum + sliders[k], 0);
+
+  const newValue = Math.max(0, Math.min(100 - fixedSum, rawValue));
+  const remaining = Math.max(0, 100 - fixedSum - newValue);
+
+  const out = { ...sliders, [changedKey]: newValue };
+  for (const k of fixedKeys) out[k] = sliders[k];
+
+  const freeSum = freeKeys.reduce((sum, k) => sum + sliders[k], 0);
+  for (const k of freeKeys) {
+    out[k] = freeSum > 0 ? (sliders[k] / freeSum) * remaining : remaining / freeKeys.length;
+  }
+
+  return out;
+}

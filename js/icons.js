@@ -25,6 +25,9 @@ const PATHS = {
   "system-lost": `<path d="M12 3l2.2 6.8H21l-5.6 4.2L17.6 21 12 16.9 6.4 21l2.2-6.9L3 9.8h6.8z"/><path d="M4 4l16 16" stroke="var(--danger,#e05555)"/>`,
   jump: `<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/>`,
   dismiss: `<path d="M5 5l14 14M19 5L5 19"/>`,
+  planets: `<circle cx="7" cy="7" r="3.4"/><circle cx="17" cy="6" r="2.2"/><circle cx="16" cy="17" r="3.8"/><circle cx="6" cy="17" r="2"/>`,
+  lock: `<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>`,
+  unlock: `<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.3-2.2"/>`,
 };
 
 // Liefert Inline-SVG-Markup für `name` (siehe PATHS oben). size in px,
